@@ -1,4 +1,11 @@
-import { Controller, Post, Get, Body, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { AgentService } from './agent.service';
 
 interface QueryRequest {

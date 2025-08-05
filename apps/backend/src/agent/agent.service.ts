@@ -33,14 +33,17 @@ export class AgentService {
 
       // Build command with model configuration
       let command = `${venvPath} ${scriptPath} "${question}"`;
-      
+
       if (modelConfig) {
         command += ` --model ${modelConfig.provider}:${modelConfig.model}`;
-        
+
         // Add API key from environment variables based on provider
         if (modelConfig.provider === 'openai' && process.env.OPENAI_API_KEY) {
           command += ` --api-key ${process.env.OPENAI_API_KEY}`;
-        } else if (modelConfig.provider === 'gemini' && process.env.GEMINI_API_KEY) {
+        } else if (
+          modelConfig.provider === 'gemini' &&
+          process.env.GEMINI_API_KEY
+        ) {
           command += ` --api-key ${process.env.GEMINI_API_KEY}`;
         }
       }
@@ -111,11 +114,11 @@ export class AgentService {
           const status = trimmedLine.startsWith('✅') ? '✅' : '❌';
           const remainingText = trimmedLine.substring(2).trim(); // Remove ✅ or ❌
           const colonIndex = remainingText.indexOf(':');
-          
+
           if (colonIndex !== -1) {
             const provider = remainingText.substring(0, colonIndex).trim();
             const modelList = remainingText.substring(colonIndex + 1).trim();
-            
+
             models[provider] = {
               available: status === '✅',
               models: modelList.split(', ').filter((m) => m.trim()),
