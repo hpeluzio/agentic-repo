@@ -1,37 +1,40 @@
 #!/usr/bin/env python3
 """
 Query Engine for AI Agentic System
-Uses LlamaIndex with ChromaDB for document storage and retrieval
+Uses LlamaIndex with Ollama (Llama 3.1) for document storage and retrieval
 """
 
 import os
 import sys
 from typing import List, Optional
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, Settings
-from llama_index.vector_stores.chroma import ChromaVectorStore
-from llama_index.embeddings.openai import OpenAIEmbedding
-from llama_index.llms.openai import OpenAI
-import chromadb
-from chromadb.config import Settings as ChromaSettings
+from llama_index.core.vector_stores import SimpleVectorStore
+from llama_index.core.embeddings import MockEmbedding
+from llama_index.llms.ollama import Ollama
 
 class QueryEngine:
-    def __init__(self, persist_dir: str = "./chroma_db"):
-        """Initialize the query engine with ChromaDB persistence"""
-        self.persist_dir = persist_dir
-        self.chroma_client = chromadb.PersistentClient(path=persist_dir)
-        self.collection = self.chroma_client.get_or_create_collection("documents")
-        self.vector_store = ChromaVectorStore(chroma_collection=self.collection)
-        
-        # Initialize OpenAI components
-        self.embed_model = OpenAIEmbedding()
-        self.llm = OpenAI(model="gpt-3.5-turbo")
-        
-        # Set global settings
-        Settings.embed_model = self.embed_model
-        Settings.llm = self.llm
-        
-        self.index = None
-        self.query_engine = None
+    def __init__(self):
+        """Initialize the query engine with Ollama LLM"""
+        try:
+            # Initialize Ollama LLM
+            self.llm = Ollama(model="llama3.1:8b", request_timeout=120.0)
+            
+            # Use mock embedding (no external dependencies needed)
+            self.embed_model = MockEmbedding(embed_dim=384)
+            
+            # Set global settings
+            Settings.embed_model = self.embed_model
+            Settings.llm = self.llm
+            
+            self.index = None
+            self.query_engine = None
+            
+            print("✅ Initialized with Ollama (Llama 3.1) and mock embeddings")
+            
+        except Exception as e:
+            print(f"❌ Error initializing components: {e}")
+            print("Make sure Ollama is running: brew services start ollama")
+            sys.exit(1)
     
     def load_documents(self, directory_path: str) -> None:
         """Load documents from a directory and create the index"""
@@ -39,11 +42,8 @@ class QueryEngine:
             # Load documents
             documents = SimpleDirectoryReader(directory_path).load_data()
             
-            # Create index
-            self.index = VectorStoreIndex.from_documents(
-                documents, 
-                vector_store=self.vector_store
-            )
+            # Create index with simple vector store
+            self.index = VectorStoreIndex.from_documents(documents)
             
             # Create query engine
             self.query_engine = self.index.as_query_engine()
@@ -71,10 +71,7 @@ class QueryEngine:
             documents = SimpleDirectoryReader(input_files=[file_path]).load_data()
             
             if not self.index:
-                self.index = VectorStoreIndex.from_documents(
-                    documents, 
-                    vector_store=self.vector_store
-                )
+                self.index = VectorStoreIndex.from_documents(documents)
                 self.query_engine = self.index.as_query_engine()
             else:
                 # Add to existing index
@@ -99,8 +96,10 @@ def main():
     # Initialize query engine
     engine = QueryEngine()
     
-    # Check if documents directory exists
-    docs_dir = "./documents"
+    # Check if documents directory exists (relative to script location)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    docs_dir = os.path.join(script_dir, "documents")
+    
     if os.path.exists(docs_dir):
         engine.load_documents(docs_dir)
     else:
