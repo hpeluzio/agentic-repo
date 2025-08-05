@@ -16,6 +16,16 @@ interface ModelConfig {
   apiKey?: string;
 }
 
+interface ModelProvider {
+  available: boolean;
+  models: string[];
+  requiresApiKey: boolean;
+}
+
+interface AvailableModels {
+  [key: string]: ModelProvider;
+}
+
 @Injectable()
 export class AgentService {
   /**
@@ -88,7 +98,7 @@ export class AgentService {
   /**
    * Get available models
    */
-  async getAvailableModels(): Promise<any> {
+  async getAvailableModels(): Promise<AvailableModels> {
     try {
       const scriptPath = join(process.cwd(), '../llama-bridge/query_engine.py');
       const venvPath = join(process.cwd(), '../llama-bridge/venv/bin/python');
@@ -105,7 +115,7 @@ export class AgentService {
 
       // Parse the output to extract model information
       const lines = stdout.split('\n');
-      const models: any = {};
+      const models: AvailableModels = {};
 
       for (const line of lines) {
         if (line.includes('✅') || line.includes('❌')) {
@@ -133,7 +143,7 @@ export class AgentService {
       return models;
     } catch (error) {
       console.error('Error getting available models:', error);
-      return {
+      const fallbackModels: AvailableModels = {
         ollama: {
           available: true,
           models: ['llama3.1:8b', 'llama3.1:70b', 'mistral:7b', 'codellama:7b'],
@@ -150,6 +160,7 @@ export class AgentService {
           requiresApiKey: true,
         },
       };
+      return fallbackModels;
     }
   }
 

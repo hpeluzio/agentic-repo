@@ -21,18 +21,22 @@ export class AgentController {
   constructor(private readonly agentService: AgentService) {}
 
   @Post('query')
-  async queryDocuments(@Body() body: QueryRequest) {
+  async queryDocuments(
+    @Body() body: QueryRequest,
+  ): Promise<{ success: boolean; response: string }> {
     try {
       const response = await this.agentService.queryDocuments(
         body.question,
         body.modelConfig,
       );
       return { success: true, response };
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       throw new HttpException(
         {
           success: false,
-          message: (error as Error).message,
+          message: errorMessage,
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
@@ -40,15 +44,23 @@ export class AgentController {
   }
 
   @Get('models')
-  async getAvailableModels() {
+  async getAvailableModels(): Promise<{
+    success: boolean;
+    models: Record<
+      string,
+      { available: boolean; models: string[]; requiresApiKey: boolean }
+    >;
+  }> {
     try {
       const models = await this.agentService.getAvailableModels();
       return { success: true, models };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       throw new HttpException(
         {
           success: false,
-          message: (error as Error).message,
+          message: errorMessage,
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
@@ -61,10 +73,12 @@ export class AgentController {
       const response = await this.agentService.addDocument(body.filePath);
       return { success: true, message: response };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       throw new HttpException(
         {
           success: false,
-          message: (error as Error).message,
+          message: errorMessage,
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
@@ -77,10 +91,12 @@ export class AgentController {
       const status = await this.agentService.getStatus();
       return { success: true, ...status };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       throw new HttpException(
         {
           success: false,
-          message: (error as Error).message,
+          message: errorMessage,
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
