@@ -1,33 +1,48 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  HttpException,
-  HttpStatus,
-} from '@nestjs/common';
+import { Controller, Post, Get, Body, HttpException, HttpStatus } from '@nestjs/common';
 import { AgentService } from './agent.service';
+
+interface QueryRequest {
+  question: string;
+  modelConfig?: {
+    provider: string;
+    model: string;
+  };
+}
 
 @Controller('agent')
 export class AgentController {
   constructor(private readonly agentService: AgentService) {}
 
   @Post('query')
-  async queryDocuments(@Body() body: { question: string }) {
+  async queryDocuments(@Body() body: QueryRequest) {
     try {
-      if (!body.question) {
-        throw new HttpException('Question is required', HttpStatus.BAD_REQUEST);
-      }
-
-      const response = await this.agentService.queryDocuments(body.question);
-      return {
-        success: true,
-        response,
-        timestamp: new Date().toISOString(),
-      };
+      const response = await this.agentService.queryDocuments(
+        body.question,
+        body.modelConfig,
+      );
+      return { success: true, response };
     } catch (error) {
       throw new HttpException(
-        (error as Error).message || 'Failed to query documents',
+        {
+          success: false,
+          message: (error as Error).message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Get('models')
+  async getAvailableModels() {
+    try {
+      const models = await this.agentService.getAvailableModels();
+      return { success: true, models };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          message: (error as Error).message,
+        },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -36,19 +51,14 @@ export class AgentController {
   @Post('add-document')
   async addDocument(@Body() body: { filePath: string }) {
     try {
-      if (!body.filePath) {
-        throw new HttpException('File path is required', HttpStatus.BAD_REQUEST);
-      }
-
       const response = await this.agentService.addDocument(body.filePath);
-      return {
-        success: true,
-        response,
-        timestamp: new Date().toISOString(),
-      };
+      return { success: true, message: response };
     } catch (error) {
       throw new HttpException(
-        (error as Error).message || 'Failed to add document',
+        {
+          success: false,
+          message: (error as Error).message,
+        },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -58,13 +68,13 @@ export class AgentController {
   async getStatus() {
     try {
       const status = await this.agentService.getStatus();
-      return {
-        success: true,
-        ...status,
-      };
+      return { success: true, ...status };
     } catch (error) {
       throw new HttpException(
-        (error as Error).message || 'Failed to get status',
+        {
+          success: false,
+          message: (error as Error).message,
+        },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
