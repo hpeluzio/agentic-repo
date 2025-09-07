@@ -11,9 +11,11 @@ export class ChatService {
 
   constructor(private readonly httpService: HttpService) {}
 
-  async sendToAgent(message: string): Promise<any> {
+  async sendToAgent(message: string, userRole?: string): Promise<any> {
     try {
-      console.log(`[ChatService] Routing message to python-agent: ${message}`);
+      console.log(
+        `[ChatService] Routing message to python-agent: ${message} (Role: ${userRole})`,
+      );
 
       // Route all messages to python-agent (LangGraph agent with database tools)
       const response = await firstValueFrom(
@@ -21,6 +23,7 @@ export class ChatService {
           this.AGENT_URL,
           {
             message: message,
+            user_role: userRole,
             timestamp: new Date().toISOString(),
           },
           {

@@ -7,7 +7,7 @@ It's a simplified version of our previous examples.
 """
 
 import os
-from typing import Annotated, TypedDict
+from typing import Annotated, TypedDict, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import tool
@@ -20,6 +20,12 @@ from tools.database_tool import (
     query_database, get_top_customers, get_customer_purchases,
     get_products_by_category_tool, get_database_stats, generate_and_execute_sql
 )
+
+# Extended state to include user information
+class AgentState(TypedDict):
+    messages: Annotated[list, "List of messages"]
+    user_role: Optional[str]
+    permission_checked: bool
 
 # Custom tools
 @tool
@@ -63,7 +69,44 @@ def create_wikipedia_tool():
     api_wrapper = WikipediaAPIWrapper(top_k_results=2)
     return WikipediaQueryRun(api_wrapper=api_wrapper)
 
-def should_continue(state: MessagesState):
+def check_permissions(state: AgentState):
+    """Check if the user has permission to access database tools."""
+    user_role = state.get("user_role", "employee")
+    last_message = state["messages"][-1]
+    message_content = last_message.content if hasattr(last_message, 'content') else str(last_message)
+    
+    # Define sensitive keywords that require higher permissions
+    sensitive_keywords = [
+        "revenue", "profit", "financial", "salary", "compensation", "budget",
+        "customer data", "personal information", "confidential", "sensitive",
+        "delete", "update", "modify", "change", "alter"
+    ]
+    
+    # Check if the message contains sensitive information
+    message_lower = message_content.lower()
+    is_sensitive = any(keyword in message_lower for keyword in sensitive_keywords)
+    
+    # Permission logic
+    if user_role == "admin":
+        return {"permission_checked": True, "access_granted": True}
+    elif user_role == "manager":
+        if is_sensitive:
+            return {
+                "permission_checked": True, 
+                "access_granted": False,
+                "messages": [AIMessage(content="I'm sorry, but this query contains sensitive information that requires admin-level access. Please contact an administrator or rephrase your question to focus on general business metrics.")]
+            }
+        return {"permission_checked": True, "access_granted": True}
+    else:  # employee
+        if is_sensitive:
+            return {
+                "permission_checked": True, 
+                "access_granted": False,
+                "messages": [AIMessage(content="I'm sorry, but this query contains sensitive information that requires manager or admin access. Please contact your manager or rephrase your question to focus on general company information.")]
+            }
+        return {"permission_checked": True, "access_granted": True}
+
+def should_continue(state: AgentState):
     """Determine if we should continue to tools or end."""
     last_message = state["messages"][-1]
     
@@ -73,6 +116,15 @@ def should_continue(state: MessagesState):
     
     # End the conversation if no tool calls are present
     return END
+
+def should_check_permissions(state: AgentState):
+    """Determine if we need to check permissions first."""
+    if not state.get("permission_checked", False):
+        return "check_permissions"
+    elif state.get("access_granted", True):
+        return "chatbot"
+    else:
+        return END
 
 def create_graph_workflow():
     """Create the complete graph workflow with all tools and nodes."""
@@ -112,14 +164,14 @@ def create_graph_workflow():
         # Otherwise, proceed with a regular LLM response
         return {"messages": [model_with_tools.invoke(state["messages"])]}
     
-    # Create workflow
+    # Create workflow with original state
     workflow = StateGraph(MessagesState)
     
-    # Add nodes for chatbot and tools
+    # Add nodes for chatbot and tools (permission checking temporarily disabled)
     workflow.add_node("chatbot", call_model)
     workflow.add_node("tools", tool_node)
     
-    # Define an edge connecting START to the chatbot
+    # Define an edge connecting START to chatbot
     workflow.add_edge(START, "chatbot")
     
     # Define conditional edges and route "tools" back to "chatbot"

@@ -40,7 +40,7 @@ export class ChatController {
 
   @Post('database')
   async chatDatabase(
-    @Body() body: { message: string },
+    @Body() body: { message: string; user_role: string },
     @Headers('authorization') auth: string,
   ) {
     try {
@@ -54,12 +54,23 @@ export class ChatController {
         throw new HttpException('Message is required', HttpStatus.BAD_REQUEST);
       }
 
-      // 3. Log the request
-      console.log(`[NestJS] Database query: ${body.message}`);
+      // 3. Validate user role for database access
+      if (!['admin', 'manager'].includes(body.user_role)) {
+        throw new HttpException(
+          'Access denied. Database queries require admin or manager role.',
+          HttpStatus.FORBIDDEN,
+        );
+      }
 
-      // 4. Call the Python service
+      // 4. Log the request
+      console.log(
+        `[NestJS] Database query from ${body.user_role}: ${body.message}`,
+      );
+
+      // 5. Call the Python service
       const agentResponse = (await this.chatService.sendToAgent(
         body.message,
+        body.user_role,
       )) as AgentResponse;
 
       // 5. Return response with the same structure as python-agent
@@ -87,7 +98,7 @@ export class ChatController {
 
   @Post('rag')
   async chatRag(
-    @Body() body: { message: string },
+    @Body() body: { message: string; user_role: string },
     @Headers('authorization') auth: string,
   ) {
     try {
@@ -102,13 +113,13 @@ export class ChatController {
       }
 
       // 3. Log the request
-      console.log(`[NestJS] RAG query: ${body.message}`);
+      console.log(`[NestJS] RAG query from ${body.user_role}: ${body.message}`);
 
       // 4. For now, return a placeholder response
       // TODO: Implement RAG functionality
       return {
         success: false,
-        response: 'RAG functionality is not implemented yet. Coming soon!',
+        response: `RAG functionality is not implemented yet. Coming soon! (User role: ${body.user_role})`,
         timestamp: new Date().toISOString(),
         rag_info: null,
       };

@@ -15,6 +15,7 @@ import logging
 from datetime import datetime
 from dotenv import load_dotenv
 from pathlib import Path
+from langchain_core.messages import HumanMessage
 
 # Load environment variables from .env file in the current directory
 env_path = Path(__file__).parent / '.env'
@@ -70,6 +71,7 @@ def extract_sql_info_from_messages(messages):
 # Pydantic models
 class ChatRequest(BaseModel):
     message: str
+    user_role: Optional[str] = None
 
 class ChatResponse(BaseModel):
     success: bool
@@ -129,8 +131,21 @@ async def chat(request: ChatRequest):
 
         # Process the message through the agent
         thread_id = f"api_session_{datetime.now().timestamp()}"
+        
+        # Add role context to the message
+        user_role = request.user_role or "employee"
+        
+        if user_role == "employee":
+            role_context = f"[SECURITY: Employee Role - RESTRICTED ACCESS] You are an employee with limited access. You can only provide general, non-sensitive information. DO NOT provide financial data, revenue, profit, salary information, or any confidential business metrics. If asked for sensitive information, politely decline and suggest contacting a manager or admin. "
+        elif user_role == "manager":
+            role_context = f"[SECURITY: Manager Role - MODERATE ACCESS] You are a manager with moderate access. You can provide business metrics and team information, but avoid highly sensitive financial data like exact revenue, profit margins, or personal salary information. "
+        else:  # admin
+            role_context = f"[SECURITY: Admin Role - FULL ACCESS] You are an administrator with full access to all data. You can provide comprehensive information including financial and sensitive data. "
+        
+        enhanced_message = role_context + f"User question: {request.message}"
+        
         result = agent.invoke(
-            {"messages": [("user", request.message)]},
+            {"messages": [HumanMessage(content=enhanced_message)]},
             config={"configurable": {"thread_id": thread_id}}
         )
         
