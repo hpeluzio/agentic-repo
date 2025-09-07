@@ -8,6 +8,7 @@ export class ChatService {
     process.env.AGENT_URL || 'http://localhost:8000/chat';
   private readonly AGENT_HEALTH_URL =
     process.env.AGENT_HEALTH_URL || 'http://localhost:8000/health';
+  private readonly RAG_URL = process.env.RAG_URL || 'http://localhost:8000/rag';
 
   constructor(private readonly httpService: HttpService) {}
 
@@ -60,6 +61,59 @@ export class ChatService {
 
       throw new HttpException(
         'Failed to communicate with agent',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  async sendToRag(message: string): Promise<any> {
+    try {
+      console.log(
+        `[ChatService] Routing RAG query to python-agent: ${message}`,
+      );
+
+      // Route RAG queries to python-agent RAG endpoint
+      const response = await firstValueFrom(
+        this.httpService.post(
+          this.RAG_URL,
+          {
+            message: message,
+            timestamp: new Date().toISOString(),
+          },
+          {
+            timeout: 30000, // 30 seconds timeout
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+
+      console.log(`[ChatService] RAG response received`);
+      return response.data;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      console.error('[ChatService] Error calling RAG agent:', errorMessage);
+
+      if (error && typeof error === 'object' && 'code' in error) {
+        if (error.code === 'ECONNREFUSED') {
+          throw new HttpException(
+            'RAG service is unavailable',
+            HttpStatus.SERVICE_UNAVAILABLE,
+          );
+        }
+
+        if (error.code === 'ECONNABORTED') {
+          throw new HttpException(
+            'RAG service timeout',
+            HttpStatus.REQUEST_TIMEOUT,
+          );
+        }
+      }
+
+      throw new HttpException(
+        'Failed to communicate with RAG agent',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

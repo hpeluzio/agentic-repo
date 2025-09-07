@@ -9,13 +9,14 @@ It receives messages from NestJS and returns agent responses.
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import os
 import logging
 from datetime import datetime
 from dotenv import load_dotenv
 from pathlib import Path
 from langchain_core.messages import HumanMessage
+from rag_service import get_rag_service
 
 # Load environment variables from .env file in the current directory
 env_path = Path(__file__).parent / '.env'
@@ -83,6 +84,15 @@ class HealthResponse(BaseModel):
     status: str
     timestamp: str
     agent_loaded: bool
+
+class RagRequest(BaseModel):
+    message: str
+
+class RagResponse(BaseModel):
+    success: bool
+    response: str
+    timestamp: str
+    sources: Optional[List[Dict[str, Any]]] = None
 
 @app.on_event("startup")
 async def startup_event():
@@ -181,6 +191,65 @@ async def chat(request: ChatRequest):
             detail=f"Internal server error: {str(e)}"
         )
 
+@app.post("/rag", response_model=RagResponse)
+async def rag_chat(request: RagRequest):
+    """
+    RAG endpoint that answers questions based on company documents.
+    """
+    try:
+        if not request.message or request.message.strip() == "":
+            raise HTTPException(
+                status_code=400,
+                detail="Message cannot be empty"
+            )
+
+        logger.info(f"Processing RAG query: {request.message[:100]}...")
+
+        # Get RAG service
+        rag_service = get_rag_service()
+        
+        # Process the question
+        result = rag_service.answer_question(request.message)
+
+        logger.info("✅ RAG query processed successfully")
+
+        return RagResponse(
+            success=result["success"],
+            response=result["response"],
+            timestamp=datetime.now().isoformat(),
+            sources=result.get("sources", [])
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error processing RAG query: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
+@app.get("/rag/documents")
+async def get_documents():
+    """Get list of available documents."""
+    try:
+        rag_service = get_rag_service()
+        documents = rag_service.get_available_documents()
+        categories = rag_service.get_document_categories()
+        
+        return {
+            "success": True,
+            "documents": documents,
+            "categories": categories,
+            "total_documents": len(documents)
+        }
+    except Exception as e:
+        logger.error(f"❌ Error getting documents: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
 @app.get("/")
 async def root():
     """Root endpoint with API information."""
@@ -191,6 +260,10 @@ async def root():
             "database_agent": {
                 "chat": "/chat",
                 "health": "/health"
+            },
+            "rag_agent": {
+                "chat": "/rag",
+                "documents": "/rag/documents"
             },
             "docs": "/docs"
         }

@@ -31,6 +31,17 @@ interface HealthResponse {
   agent_loaded: boolean;
 }
 
+interface RagResponse {
+  success: boolean;
+  response: string;
+  timestamp: string;
+  sources?: Array<{
+    title: string;
+    category: string;
+    relevance_score: number;
+  }> | null;
+}
+
 @Controller('chat')
 export class ChatController {
   constructor(
@@ -98,7 +109,7 @@ export class ChatController {
 
   @Post('rag')
   async chatRag(
-    @Body() body: { message: string; user_role: string },
+    @Body() body: { message: string },
     @Headers('authorization') auth: string,
   ) {
     try {
@@ -113,15 +124,19 @@ export class ChatController {
       }
 
       // 3. Log the request
-      console.log(`[NestJS] RAG query from ${body.user_role}: ${body.message}`);
+      console.log(`[NestJS] RAG query: ${body.message}`);
 
-      // 4. For now, return a placeholder response
-      // TODO: Implement RAG functionality
+      // 4. Call the RAG service
+      const ragResponse = (await this.chatService.sendToRag(
+        body.message,
+      )) as RagResponse;
+
+      // 5. Return response with the same structure as RAG service
       return {
-        success: false,
-        response: `RAG functionality is not implemented yet. Coming soon! (User role: ${body.user_role})`,
-        timestamp: new Date().toISOString(),
-        rag_info: null,
+        success: ragResponse.success,
+        response: ragResponse.response,
+        timestamp: ragResponse.timestamp,
+        sources: ragResponse.sources || null,
       };
     } catch (error: unknown) {
       const errorMessage =
