@@ -15,9 +15,7 @@ interface AvailableModels {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'database' | 'backend'>(
-    'database',
-  );
+  const [activeTab, setActiveTab] = useState<'database' | 'rag'>('database');
 
   // Database Agent Tab State
   const [question, setQuestion] = useState('');
@@ -25,47 +23,16 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
 
-  // Backend Tab State (existing functionality)
-  const [backendQuestion, setBackendQuestion] = useState('');
-  const [backendResponse, setBackendResponse] = useState('');
-  const [backendLoading, setBackendLoading] = useState(false);
-  const [backendStatus, setBackendStatus] = useState('');
-  const [availableModels, setAvailableModels] = useState<AvailableModels>({});
-  const [selectedModel, setSelectedModel] = useState<ModelConfig>({
-    provider: 'openai',
-    model: 'gpt-3.5-turbo',
-  });
+  // RAG Tab State
+  const [ragQuestion, setRagQuestion] = useState('');
+  const [ragResponse, setRagResponse] = useState('');
+  const [ragLoading, setRagLoading] = useState(false);
+  const [ragStatus, setRagStatus] = useState('');
 
   useEffect(() => {
-    loadAvailableModels();
-    checkStatus();
+    checkDatabaseStatus();
+    checkRagStatus();
   }, []);
-
-  const loadAvailableModels = async () => {
-    try {
-      const res = await fetch('http://localhost:3000/agent/models');
-      const data = await res.json();
-      if (data.success) {
-        setAvailableModels(data.models);
-      }
-    } catch (error) {
-      console.error('Error loading models:', error);
-    }
-  };
-
-  const checkStatus = async () => {
-    try {
-      const res = await fetch('http://localhost:3000/agent/status');
-      const data = await res.json();
-      if (data.success) {
-        setStatus('✅ Backend System: Connected');
-      } else {
-        setStatus('❌ Backend System: Error');
-      }
-    } catch (error) {
-      setStatus('❌ Backend System: Connection Error');
-    }
-  };
 
   const checkDatabaseStatus = async () => {
     try {
@@ -81,13 +48,56 @@ function App() {
     }
   };
 
+  const checkRagStatus = async () => {
+    try {
+      const res = await fetch('http://localhost:3000/chat/health');
+      const data = await res.json();
+      if (data.status === 'healthy') {
+        setRagStatus('✅ RAG Agent: Ready (Coming Soon)');
+      } else {
+        setRagStatus('❌ RAG Agent: Error');
+      }
+    } catch (error) {
+      setRagStatus('❌ RAG Agent: Connection Error');
+    }
+  };
+
+  // RAG Functions
+  const handleRagQuery = async () => {
+    if (!ragQuestion.trim()) return;
+
+    setRagLoading(true);
+    try {
+      const res = await fetch('http://localhost:3000/chat/rag', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer test-token',
+        },
+        body: JSON.stringify({
+          message: ragQuestion,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setRagResponse(data.response);
+      } else {
+        setRagResponse(`Error: ${data.message}`);
+      }
+    } catch (error) {
+      setRagResponse('Error: Failed to connect to RAG agent');
+    } finally {
+      setRagLoading(false);
+    }
+  };
+
   // Database Agent Functions
   const handleDatabaseQuery = async () => {
     if (!question.trim()) return;
 
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:3000/chat', {
+      const res = await fetch('http://localhost:3000/chat/database', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -107,35 +117,6 @@ function App() {
       setResponse('Error: Failed to connect to database agent');
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Backend Functions (existing functionality)
-  const handleBackendQuery = async () => {
-    if (!backendQuestion.trim()) return;
-
-    setBackendLoading(true);
-    try {
-      const res = await fetch('http://localhost:3000/agent/query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          question: backendQuestion,
-          modelConfig: selectedModel,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setBackendResponse(data.response);
-      } else {
-        setBackendResponse(`Error: ${data.message}`);
-      }
-    } catch (error) {
-      setBackendResponse('Error: Failed to connect to backend');
-    } finally {
-      setBackendLoading(false);
     }
   };
 
@@ -165,14 +146,14 @@ function App() {
               🗄️ Database Agent
             </button>
             <button
-              onClick={() => setActiveTab('backend')}
+              onClick={() => setActiveTab('rag')}
               className={`px-6 py-2 rounded-md font-medium transition-colors ${
-                activeTab === 'backend'
+                activeTab === 'rag'
                   ? 'bg-blue-500 text-white'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              🔧 Backend System
+              📚 RAG Agent
             </button>
           </div>
         </div>
@@ -232,101 +213,55 @@ function App() {
           </div>
         )}
 
-        {/* Backend System Tab */}
-        {activeTab === 'backend' && (
+        {/* RAG Agent Tab */}
+        {activeTab === 'rag' && (
           <div className="max-w-4xl mx-auto">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-semibold text-gray-900">
-                  🔧 Backend System
+                  📚 RAG Agent
                 </h2>
                 <button
-                  onClick={checkStatus}
+                  onClick={checkRagStatus}
                   className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors"
                 >
                   Check Status
                 </button>
               </div>
 
-              {backendStatus && (
-                <p className="mb-4 text-sm text-gray-600">{backendStatus}</p>
+              {ragStatus && (
+                <p className="mb-4 text-sm text-gray-600">{ragStatus}</p>
               )}
 
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Model Configuration:
-                  </label>
-                  <div className="grid grid-cols-2 gap-4">
-                    <select
-                      className="p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      value={selectedModel.provider}
-                      onChange={(e) =>
-                        setSelectedModel({
-                          ...selectedModel,
-                          provider: e.target.value,
-                          model:
-                            availableModels[e.target.value]?.models[0] || '',
-                        })
-                      }
-                    >
-                      {Object.entries(availableModels).map(
-                        ([provider, info]) => (
-                          <option key={provider} value={provider}>
-                            {provider} {info.available ? '✅' : '❌'}
-                          </option>
-                        ),
-                      )}
-                    </select>
-                    <select
-                      className="p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      value={selectedModel.model}
-                      onChange={(e) =>
-                        setSelectedModel({
-                          ...selectedModel,
-                          model: e.target.value,
-                        })
-                      }
-                    >
-                      {availableModels[selectedModel.provider]?.models.map(
-                        (model) => (
-                          <option key={model} value={model}>
-                            {model}
-                          </option>
-                        ),
-                      )}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Ask a question:
+                    Ask about documents:
                   </label>
                   <textarea
                     className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     rows={3}
-                    placeholder="Enter your question here..."
-                    value={backendQuestion}
-                    onChange={(e) => setBackendQuestion(e.target.value)}
+                    placeholder="e.g., What is the main topic of the documents?"
+                    value={ragQuestion}
+                    onChange={(e) => setRagQuestion(e.target.value)}
                   />
                 </div>
 
                 <button
-                  onClick={handleBackendQuery}
-                  disabled={backendLoading || !backendQuestion.trim()}
+                  onClick={handleRagQuery}
+                  disabled={ragLoading || !ragQuestion.trim()}
                   className="w-full py-3 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                 >
-                  {backendLoading ? '🤔 Thinking...' : '🔧 Ask Backend'}
+                  {ragLoading ? '🤔 Thinking...' : '📚 Ask RAG Agent'}
                 </button>
 
-                {backendResponse && (
+                {ragResponse && (
                   <div className="mt-6 p-4 bg-gray-50 rounded-md">
                     <h3 className="font-medium text-gray-900 mb-2">
                       Response:
                     </h3>
                     <p className="text-gray-700 whitespace-pre-wrap">
-                      {backendResponse}
+                      {ragResponse}
                     </p>
                   </div>
                 )}
@@ -339,7 +274,7 @@ function App() {
         <div className="text-center mt-12 text-gray-500">
           <p>Built with ❤️ using NestJS, React, FastAPI, and LangGraph</p>
           <p className="text-sm mt-2">
-            Database Agent: OpenAI GPT models | Document processing: Coming soon
+            Database Agent: OpenAI GPT models | RAG Agent: Coming soon
           </p>
         </div>
       </div>

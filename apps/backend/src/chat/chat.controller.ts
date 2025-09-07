@@ -38,8 +38,8 @@ export class ChatController {
     private readonly httpService: HttpService,
   ) {}
 
-  @Post()
-  async chat(
+  @Post('database')
+  async chatDatabase(
     @Body() body: { message: string },
     @Headers('authorization') auth: string,
   ) {
@@ -55,7 +55,7 @@ export class ChatController {
       }
 
       // 3. Log the request
-      console.log(`[NestJS] Received message: ${body.message}`);
+      console.log(`[NestJS] Database query: ${body.message}`);
 
       // 4. Call the Python service
       const agentResponse = (await this.chatService.sendToAgent(
@@ -72,7 +72,50 @@ export class ChatController {
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
-      console.error('[NestJS] Error:', errorMessage);
+      console.error('[NestJS] Database Error:', errorMessage);
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        'Internal server error',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('rag')
+  async chatRag(
+    @Body() body: { message: string },
+    @Headers('authorization') auth: string,
+  ) {
+    try {
+      // 1. Validate authentication
+      if (!auth || !auth.startsWith('Bearer ')) {
+        throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+      }
+
+      // 2. Validate message
+      if (!body.message || body.message.trim().length === 0) {
+        throw new HttpException('Message is required', HttpStatus.BAD_REQUEST);
+      }
+
+      // 3. Log the request
+      console.log(`[NestJS] RAG query: ${body.message}`);
+
+      // 4. For now, return a placeholder response
+      // TODO: Implement RAG functionality
+      return {
+        success: false,
+        response: 'RAG functionality is not implemented yet. Coming soon!',
+        timestamp: new Date().toISOString(),
+        rag_info: null,
+      };
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      console.error('[NestJS] RAG Error:', errorMessage);
 
       if (error instanceof HttpException) {
         throw error;

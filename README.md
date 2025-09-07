@@ -126,12 +126,12 @@ Sample data is automatically loaded when the agent starts.
 
 ## 🔌 API Endpoints
 
-### 🗄️ Database Agent Endpoints
+### 🗄️ Database Agent
 
 #### Chat with Database Agent
 
 ```bash
-POST /chat
+POST /chat/database
 Authorization: Bearer test-token
 {
   "message": "Which customer bought products from all categories?"
@@ -159,16 +159,22 @@ Response:
 }
 ```
 
-#### Database Agent Health Check
+### 📚 RAG Agent (Coming Soon)
+
+#### Chat with RAG Agent
+
+```bash
+POST /chat/rag
+Authorization: Bearer test-token
+{
+  "message": "What is the main topic of the documents?"
+}
+```
+
+### System Health Check
 
 ```bash
 POST /chat/health
-```
-
-### System Status
-
-```bash
-GET /health
 ```
 
 ## 🐳 Docker Setup
@@ -207,28 +213,28 @@ python3 main.py
 ### Test Database Agent
 
 ```bash
-# Test database queries
-curl -X POST http://localhost:3000/chat \
+# Test database queries through NestJS
+curl -X POST http://localhost:3000/chat/database \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer test-token" \
   -d '{"message": "How many orders were made in September 2025?"}'
+
+# Test RAG agent (placeholder)
+curl -X POST http://localhost:3000/chat/rag \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer test-token" \
+  -d '{"message": "What is the main topic?"}'
 
 # Test health check
 curl -X POST http://localhost:3000/chat/health
 ```
 
-### Test Database Agent
+### Test Database Agent Directly
 
 ```bash
-# Test database agent directly
+# Test database agent directly (bypassing NestJS)
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
-  -d '{"message": "How many customers do we have?"}'
-
-# Test through NestJS gateway
-curl -X POST http://localhost:3000/chat \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer test-token" \
   -d '{"message": "How many customers do we have?"}'
 ```
 

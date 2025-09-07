@@ -23,9 +23,6 @@ load_dotenv(env_path)
 # Import our LangGraph agent
 from agent import create_graph_workflow
 
-# Document agent disabled - LlamaIndex removed
-# from documents_agent.document_service import DocumentService
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -47,7 +44,6 @@ app.add_middleware(
 
 # Global agent instance
 agent = None
-# document_service = None  # Disabled - LlamaIndex removed
 
 def extract_sql_info_from_messages(messages):
     """Extract SQL execution information from agent messages."""
@@ -59,76 +55,26 @@ def extract_sql_info_from_messages(messages):
     
     for message in messages:
         if hasattr(message, 'content') and isinstance(message.content, str):
-            content = message.content
-            
-            # Look for SQL-related information in the message content
-            if any(keyword in content.lower() for keyword in [
-                "query results", "sql:", "top", "customers", "purchases", 
-                "products", "database", "select", "from", "where", "comprou",
-                "gastaram", "categoria", "preço", "total", "quantidade"
-            ]):
+            # Look for SQL execution patterns
+            if "SQL Query:" in message.content:
+                # Extract SQL query information
+                sql_info["queries_executed"].append({
+                    "type": "custom_query",
+                    "description": "Custom database query",
+                    "sql_query": message.content.split("SQL Query:")[-1].strip() if "SQL Query:" in message.content else None
+                })
                 sql_info["queries_count"] += 1
-                
-                # Try to extract the actual SQL query from the content
-                sql_query = None
-                if "SQL:" in content:
-                    # Extract SQL query after "SQL:"
-                    sql_start = content.find("SQL:") + 4
-                    # Look for the end of the SQL query (next line or end of content)
-                    sql_end = content.find("\n", sql_start)
-                    if sql_end == -1:
-                        sql_end = len(content)
-                    sql_query = content[sql_start:sql_end].strip()
-                    
-                    # If the query is too short, try to get more lines
-                    if len(sql_query) < 50 and sql_end < len(content):
-                        # Look for more lines of SQL
-                        next_line_start = sql_end + 1
-                        next_line_end = content.find("\n", next_line_start)
-                        if next_line_end == -1:
-                            next_line_end = len(content)
-                        next_line = content[next_line_start:next_line_end].strip()
-                        
-                        # If next line looks like SQL (contains SELECT, FROM, WHERE, etc.)
-                        if any(keyword in next_line.upper() for keyword in ["SELECT", "FROM", "WHERE", "JOIN", "ORDER", "GROUP"]):
-                            sql_query += " " + next_line
-                
-                # Try to extract query details from the content
-                if ("top" in content.lower() and "customers" in content.lower()) or "gastaram" in content.lower():
-                    sql_info["queries_executed"].append({
-                        "type": "top_customers",
-                        "description": "Get top spending customers",
-                        "sql_query": sql_query
-                    })
-                elif "purchases" in content.lower() or "comprou" in content.lower():
-                    sql_info["queries_executed"].append({
-                        "type": "customer_purchases", 
-                        "description": "Get customer purchases",
-                        "sql_query": sql_query
-                    })
-                elif "products" in content.lower() or "categoria" in content.lower():
-                    sql_info["queries_executed"].append({
-                        "type": "products_by_category",
-                        "description": "Get products by category",
-                        "sql_query": sql_query
-                    })
-                else:
-                    sql_info["queries_executed"].append({
-                        "type": "custom_query",
-                        "description": "Custom database query",
-                        "sql_query": sql_query
-                    })
     
-    return sql_info if sql_info["queries_count"] > 0 else None
+    return sql_info
 
+# Pydantic models
 class ChatRequest(BaseModel):
     message: str
-    timestamp: str = None
 
 class ChatResponse(BaseModel):
+    success: bool
     response: str
     timestamp: str
-    success: bool
     sql_info: Optional[Dict[str, Any]] = None
 
 class HealthResponse(BaseModel):
@@ -136,41 +82,10 @@ class HealthResponse(BaseModel):
     timestamp: str
     agent_loaded: bool
 
-# Document Agent Models
-class DocumentQueryRequest(BaseModel):
-    question: str
-    model_configuration: Optional[Dict[str, Any]] = None
-
-class DocumentQueryResponse(BaseModel):
-    success: bool
-    response: str
-    model_configuration: Optional[Dict[str, Any]] = None
-    timestamp: str
-
-class DocumentLoadRequest(BaseModel):
-    model_configuration: Optional[Dict[str, Any]] = None
-
-class DocumentLoadResponse(BaseModel):
-    success: bool
-    message: str
-    documents_count: int
-    model_configuration: Optional[Dict[str, Any]] = None
-    timestamp: str
-
-class DocumentAddRequest(BaseModel):
-    file_path: str
-    model_configuration: Optional[Dict[str, Any]] = None
-
-class DocumentAddResponse(BaseModel):
-    success: bool
-    message: str
-    documents_count: Optional[int] = None
-    timestamp: str
-
 @app.on_event("startup")
 async def startup_event():
     """Initialize the agents on startup."""
-    global agent  # document_service disabled
+    global agent
     try:
         logger.info("Initializing LangGraph agent...")
         agent = create_graph_workflow()
@@ -200,46 +115,45 @@ async def chat(request: ChatRequest):
     try:
         if agent is None:
             raise HTTPException(
-                status_code=503, 
+                status_code=503,
                 detail="Agent not initialized"
             )
 
         if not request.message or request.message.strip() == "":
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail="Message cannot be empty"
             )
 
         logger.info(f"Processing message: {request.message[:100]}...")
 
-        # Process message through LangGraph agent
+        # Process the message through the agent
         thread_id = f"api_session_{datetime.now().timestamp()}"
+        result = agent.invoke(
+            {"messages": [("user", request.message)]},
+            config={"configurable": {"thread_id": thread_id}}
+        )
         
-        # Create initial state
-        initial_state = {
-            "messages": [{"role": "user", "content": request.message}]
-        }
-
-        # Run the agent
-        result = await agent.ainvoke(initial_state, config={"configurable": {"thread_id": thread_id}})
-        
-        # Extract response
+        # Extract the response
         if result and "messages" in result:
-            last_message = result["messages"][-1]
-            response_text = last_message.content if hasattr(last_message, 'content') else str(last_message)
-            
-            # Extract SQL information from messages
-            sql_info = extract_sql_info_from_messages(result["messages"])
+            messages = result["messages"]
+            if messages:
+                last_message = messages[-1]
+                response_text = last_message.content if hasattr(last_message, 'content') else str(last_message)
+            else:
+                response_text = "No response generated"
         else:
-            response_text = "I'm sorry, I couldn't process your request."
-            sql_info = None
+            response_text = "No response generated"
+
+        # Extract SQL information
+        sql_info = extract_sql_info_from_messages(result.get("messages", []))
 
         logger.info("✅ Message processed successfully")
 
         return ChatResponse(
+            success=True,
             response=response_text,
             timestamp=datetime.now().isoformat(),
-            success=True,
             sql_info=sql_info
         )
 
@@ -252,204 +166,20 @@ async def chat(request: ChatRequest):
             detail=f"Internal server error: {str(e)}"
         )
 
-# Document Agent Endpoints - DISABLED (LlamaIndex removed)
-"""
-All document endpoints are disabled because LlamaIndex was removed.
-These will be reimplemented later for RAG learning.
-
-# @app.post("/documents/query", response_model=DocumentQueryResponse)
-# async def query_documents(request: DocumentQueryRequest):
-    """
-    Query documents using the document agent.
-    """
-    try:
-        if document_service is None:
-            raise HTTPException(
-                status_code=503,
-                detail="Document service not initialized"
-            )
-
-        if not request.question or request.question.strip() == "":
-            raise HTTPException(
-                status_code=400,
-                detail="Question cannot be empty"
-            )
-
-        logger.info(f"Processing document query: {request.question[:100]}...")
-
-        # Query the document service
-        result = document_service.query_documents(request.question, request.model_configuration)
-
-        logger.info("✅ Document query processed successfully")
-
-        return DocumentQueryResponse(
-            success=result["success"],
-            response=result["response"],
-            model_configuration=result.get("model_config"),
-            timestamp=datetime.now().isoformat()
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Error processing document query: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal server error: {str(e)}"
-        )
-
-# @app.post("/documents/load", response_model=DocumentLoadResponse)
-# async def load_documents(request: DocumentLoadRequest):
-    """
-    Load documents from the documents directory.
-    """
-    try:
-        if document_service is None:
-            raise HTTPException(
-                status_code=503,
-                detail="Document service not initialized"
-            )
-
-        logger.info("Loading documents...")
-
-        # Load documents
-        result = document_service.load_documents(request.model_configuration)
-
-        logger.info("✅ Documents loading completed")
-
-        return DocumentLoadResponse(
-            success=result["success"],
-            message=result["message"],
-            documents_count=result["documents_count"],
-            model_configuration=result.get("model_config"),
-            timestamp=datetime.now().isoformat()
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Error loading documents: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal server error: {str(e)}"
-        )
-
-# @app.post("/documents/add", response_model=DocumentAddResponse)
-# async def add_document(request: DocumentAddRequest):
-    """
-    Add a single document to the index.
-    """
-    try:
-        if document_service is None:
-            raise HTTPException(
-                status_code=503,
-                detail="Document service not initialized"
-            )
-
-        if not request.file_path or request.file_path.strip() == "":
-            raise HTTPException(
-                status_code=400,
-                detail="File path cannot be empty"
-            )
-
-        logger.info(f"Adding document: {request.file_path}")
-
-        # Add document
-        result = document_service.add_document(request.file_path, request.model_configuration)
-
-        logger.info("✅ Document addition completed")
-
-        return DocumentAddResponse(
-            success=result["success"],
-            message=result["message"],
-            documents_count=result.get("documents_count"),
-            timestamp=datetime.now().isoformat()
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Error adding document: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal server error: {str(e)}"
-        )
-
-# @app.get("/documents/models")
-# async def get_available_models():
-    """
-    Get available models for document processing.
-    """
-    try:
-        if document_service is None:
-            raise HTTPException(
-                status_code=503,
-                detail="Document service not initialized"
-            )
-
-        models = document_service.get_available_models()
-        return {
-            "success": True,
-            "models": models,
-            "timestamp": datetime.now().isoformat()
-        }
-
-    except Exception as e:
-        logger.error(f"❌ Error getting available models: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal server error: {str(e)}"
-        )
-
-# @app.get("/documents/status")
-# async def get_document_status():
-    """
-    Get document service status.
-    """
-    try:
-        if document_service is None:
-            raise HTTPException(
-                status_code=503,
-                detail="Document service not initialized"
-            )
-
-        status = document_service.get_status()
-        return {
-            "success": True,
-            "status": status,
-            "timestamp": datetime.now().isoformat()
-        }
-
-    except Exception as e:
-        logger.error(f"❌ Error getting document status: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal server error: {str(e)}"
-        )
-
 @app.get("/")
 async def root():
     """Root endpoint with API information."""
     return {
-        "service": "Unified AI Agent API",
-        "version": "2.0.0",
-        "status": "running",
+        "message": "LangGraph Agent API",
+        "version": "1.0.0",
         "endpoints": {
             "database_agent": {
                 "chat": "/chat",
                 "health": "/health"
             },
-            "document_agent": {
-                "query": "/documents/query",
-                "load": "/documents/load",
-                "add": "/documents/add",
-                "models": "/documents/models",
-                "status": "/documents/status"
-            },
             "docs": "/docs"
         }
     }
-"""
 
 if __name__ == "__main__":
     import uvicorn
