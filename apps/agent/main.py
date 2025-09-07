@@ -23,6 +23,9 @@ load_dotenv(env_path)
 # Import our LangGraph agent
 from agent import create_graph_workflow
 
+# Import document agent
+from documents_agent.document_service import DocumentService
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -44,6 +47,7 @@ app.add_middleware(
 
 # Global agent instance
 agent = None
+document_service = None
 
 def extract_sql_info_from_messages(messages):
     """Extract SQL execution information from agent messages."""
@@ -132,23 +136,59 @@ class HealthResponse(BaseModel):
     timestamp: str
     agent_loaded: bool
 
+# Document Agent Models
+class DocumentQueryRequest(BaseModel):
+    question: str
+    model_configuration: Optional[Dict[str, Any]] = None
+
+class DocumentQueryResponse(BaseModel):
+    success: bool
+    response: str
+    model_configuration: Optional[Dict[str, Any]] = None
+    timestamp: str
+
+class DocumentLoadRequest(BaseModel):
+    model_configuration: Optional[Dict[str, Any]] = None
+
+class DocumentLoadResponse(BaseModel):
+    success: bool
+    message: str
+    documents_count: int
+    model_configuration: Optional[Dict[str, Any]] = None
+    timestamp: str
+
+class DocumentAddRequest(BaseModel):
+    file_path: str
+    model_configuration: Optional[Dict[str, Any]] = None
+
+class DocumentAddResponse(BaseModel):
+    success: bool
+    message: str
+    documents_count: Optional[int] = None
+    timestamp: str
+
 @app.on_event("startup")
 async def startup_event():
-    """Initialize the agent on startup."""
-    global agent
+    """Initialize the agents on startup."""
+    global agent, document_service
     try:
         logger.info("Initializing LangGraph agent...")
         agent = create_graph_workflow()
-        logger.info("✅ Agent initialized successfully")
+        logger.info("✅ LangGraph agent initialized successfully")
+        
+        logger.info("Initializing Document service...")
+        document_service = DocumentService()
+        logger.info("✅ Document service initialized successfully")
+        
     except Exception as e:
-        logger.error(f"❌ Failed to initialize agent: {e}")
+        logger.error(f"❌ Failed to initialize services: {e}")
         raise
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint."""
     return HealthResponse(
-        status="healthy" if agent is not None else "unhealthy",
+        status="healthy" if agent is not None and document_service is not None else "unhealthy",
         timestamp=datetime.now().isoformat(),
         agent_loaded=agent is not None
     )
@@ -213,16 +253,196 @@ async def chat(request: ChatRequest):
             detail=f"Internal server error: {str(e)}"
         )
 
+# Document Agent Endpoints
+@app.post("/documents/query", response_model=DocumentQueryResponse)
+async def query_documents(request: DocumentQueryRequest):
+    """
+    Query documents using the document agent.
+    """
+    try:
+        if document_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Document service not initialized"
+            )
+
+        if not request.question or request.question.strip() == "":
+            raise HTTPException(
+                status_code=400,
+                detail="Question cannot be empty"
+            )
+
+        logger.info(f"Processing document query: {request.question[:100]}...")
+
+        # Query the document service
+        result = document_service.query_documents(request.question, request.model_configuration)
+
+        logger.info("✅ Document query processed successfully")
+
+        return DocumentQueryResponse(
+            success=result["success"],
+            response=result["response"],
+            model_configuration=result.get("model_config"),
+            timestamp=datetime.now().isoformat()
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error processing document query: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
+@app.post("/documents/load", response_model=DocumentLoadResponse)
+async def load_documents(request: DocumentLoadRequest):
+    """
+    Load documents from the documents directory.
+    """
+    try:
+        if document_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Document service not initialized"
+            )
+
+        logger.info("Loading documents...")
+
+        # Load documents
+        result = document_service.load_documents(request.model_configuration)
+
+        logger.info("✅ Documents loading completed")
+
+        return DocumentLoadResponse(
+            success=result["success"],
+            message=result["message"],
+            documents_count=result["documents_count"],
+            model_configuration=result.get("model_config"),
+            timestamp=datetime.now().isoformat()
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error loading documents: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
+@app.post("/documents/add", response_model=DocumentAddResponse)
+async def add_document(request: DocumentAddRequest):
+    """
+    Add a single document to the index.
+    """
+    try:
+        if document_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Document service not initialized"
+            )
+
+        if not request.file_path or request.file_path.strip() == "":
+            raise HTTPException(
+                status_code=400,
+                detail="File path cannot be empty"
+            )
+
+        logger.info(f"Adding document: {request.file_path}")
+
+        # Add document
+        result = document_service.add_document(request.file_path, request.model_configuration)
+
+        logger.info("✅ Document addition completed")
+
+        return DocumentAddResponse(
+            success=result["success"],
+            message=result["message"],
+            documents_count=result.get("documents_count"),
+            timestamp=datetime.now().isoformat()
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error adding document: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
+@app.get("/documents/models")
+async def get_available_models():
+    """
+    Get available models for document processing.
+    """
+    try:
+        if document_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Document service not initialized"
+            )
+
+        models = document_service.get_available_models()
+        return {
+            "success": True,
+            "models": models,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Error getting available models: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
+@app.get("/documents/status")
+async def get_document_status():
+    """
+    Get document service status.
+    """
+    try:
+        if document_service is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Document service not initialized"
+            )
+
+        status = document_service.get_status()
+        return {
+            "success": True,
+            "status": status,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Error getting document status: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
 @app.get("/")
 async def root():
     """Root endpoint with API information."""
     return {
-        "service": "LangGraph Agent API",
-        "version": "1.0.0",
+        "service": "Unified AI Agent API",
+        "version": "2.0.0",
         "status": "running",
         "endpoints": {
-            "chat": "/chat",
-            "health": "/health",
+            "database_agent": {
+                "chat": "/chat",
+                "health": "/health"
+            },
+            "document_agent": {
+                "query": "/documents/query",
+                "load": "/documents/load",
+                "add": "/documents/add",
+                "models": "/documents/models",
+                "status": "/documents/status"
+            },
             "docs": "/docs"
         }
     }

@@ -15,13 +15,27 @@ interface AvailableModels {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'direct' | 'backend'>('direct');
+  const [activeTab, setActiveTab] = useState<
+    'direct' | 'documents' | 'backend'
+  >('direct');
 
   // Direct Agent Tab State
   const [directQuestion, setDirectQuestion] = useState('');
   const [directResponse, setDirectResponse] = useState('');
   const [directLoading, setDirectLoading] = useState(false);
   const [directStatus, setDirectStatus] = useState('');
+
+  // Document Agent Tab State
+  const [documentQuestion, setDocumentQuestion] = useState('');
+  const [documentResponse, setDocumentResponse] = useState('');
+  const [documentLoading, setDocumentLoading] = useState(false);
+  const [documentStatus, setDocumentStatus] = useState('');
+  const [documentModels, setDocumentModels] = useState<AvailableModels>({});
+  const [selectedDocumentModel, setSelectedDocumentModel] =
+    useState<ModelConfig>({
+      provider: 'ollama',
+      model: 'llama3.1:8b',
+    });
 
   // Backend Tab State (existing functionality)
   const [question, setQuestion] = useState('');
@@ -36,8 +50,10 @@ function App() {
 
   useEffect(() => {
     loadAvailableModels();
+    loadDocumentModels();
     checkStatus();
     checkDirectStatus();
+    checkDocumentStatus();
   }, []);
 
   const loadAvailableModels = async () => {
@@ -152,6 +168,75 @@ function App() {
     }
   };
 
+  // Document Agent Functions
+  const loadDocumentModels = async () => {
+    try {
+      const res = await fetch('http://localhost:3000/documents/models', {
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDocumentModels(data.models);
+      }
+    } catch (error) {
+      console.error('Error loading document models:', error);
+    }
+  };
+
+  const checkDocumentStatus = async () => {
+    try {
+      const res = await fetch('http://localhost:3000/documents/status', {
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDocumentStatus(
+          data.status.documents_loaded
+            ? '✅ Documents Loaded'
+            : '⚠️ No Documents',
+        );
+      } else {
+        setDocumentStatus('❌ Service Error');
+      }
+    } catch (error) {
+      setDocumentStatus('❌ Connection Error');
+    }
+  };
+
+  const handleDocumentQuery = async () => {
+    if (!documentQuestion.trim()) return;
+
+    setDocumentLoading(true);
+    try {
+      const res = await fetch('http://localhost:3000/documents/query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer test-token',
+        },
+        body: JSON.stringify({
+          question: documentQuestion,
+          model_configuration: selectedDocumentModel,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setDocumentResponse(data.response);
+      } else {
+        setDocumentResponse(`Error: ${data.response}`);
+      }
+    } catch (error) {
+      setDocumentResponse('Error: Failed to connect to document service');
+    } finally {
+      setDocumentLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
       <div className="max-w-4xl mx-auto">
@@ -176,7 +261,17 @@ function App() {
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              🚀 Chat Service (Port 3000)
+              🚀 Database Agent (Port 3000)
+            </button>
+            <button
+              onClick={() => setActiveTab('documents')}
+              className={`flex-1 px-6 py-3 text-sm font-medium transition-colors ${
+                activeTab === 'documents'
+                  ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              📄 Document Agent (Port 3000)
             </button>
             <button
               onClick={() => setActiveTab('backend')}
@@ -199,7 +294,7 @@ function App() {
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-gray-700">
-                  Chat Service Status
+                  Database Agent Status
                 </h2>
                 <button
                   onClick={checkDirectStatus}
@@ -216,7 +311,7 @@ function App() {
             {/* Direct Agent Query Interface */}
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-xl font-semibold text-gray-700 mb-4">
-                Ask Chat Service (LangGraph + Database Tools)
+                Ask Database Agent (LangGraph + SQLite)
               </h2>
 
               <div className="space-y-4">
@@ -238,8 +333,8 @@ function App() {
                 </div>
 
                 <div className="text-sm text-gray-600 bg-green-50 p-3 rounded-lg">
-                  <strong>Chat Service Features:</strong> Database queries, SQL
-                  generation, customer analysis, product information, and
+                  <strong>Database Agent Features:</strong> Database queries,
+                  SQL generation, customer analysis, product information, and
                   general AI assistance via python-agent.
                 </div>
 
@@ -248,7 +343,7 @@ function App() {
                   disabled={directLoading || !directQuestion.trim()}
                   className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  {directLoading ? '🤔 Thinking...' : '🚀 Ask Chat Service'}
+                  {directLoading ? '🤔 Thinking...' : '🚀 Ask Database Agent'}
                 </button>
               </div>
 
@@ -261,6 +356,133 @@ function App() {
                   <div className="bg-gray-50 rounded-lg p-4 border-l-4 border-green-500">
                     <p className="text-gray-800 whitespace-pre-wrap">
                       {directResponse}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        ) : activeTab === 'documents' ? (
+          /* Document Agent Tab */
+          <>
+            {/* Document Agent Status */}
+            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-700">
+                  Document Agent Status
+                </h2>
+                <button
+                  onClick={checkDocumentStatus}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                >
+                  Check Status
+                </button>
+              </div>
+              {documentStatus && (
+                <p className="mt-2 text-sm text-gray-600">{documentStatus}</p>
+              )}
+            </div>
+
+            {/* Model Selection for Documents */}
+            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+              <h2 className="text-xl font-semibold text-gray-700 mb-4">
+                Select AI Model for Document Processing
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Provider
+                  </label>
+                  <select
+                    value={selectedDocumentModel.provider}
+                    onChange={(e) =>
+                      setSelectedDocumentModel({
+                        ...selectedDocumentModel,
+                        provider: e.target.value,
+                        model: documentModels[e.target.value]?.models[0] || '',
+                      })
+                    }
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    {Object.entries(documentModels).map(([provider, info]) => (
+                      <option
+                        key={provider}
+                        value={provider}
+                        disabled={!info.available}
+                      >
+                        {info.available ? '✅' : '❌'} {provider.toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Model
+                  </label>
+                  <select
+                    value={selectedDocumentModel.model}
+                    onChange={(e) =>
+                      setSelectedDocumentModel({
+                        ...selectedDocumentModel,
+                        model: e.target.value,
+                      })
+                    }
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    {documentModels[selectedDocumentModel.provider]?.models.map(
+                      (model) => (
+                        <option key={model} value={model}>
+                          {model}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Document Agent Query */}
+            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+              <h2 className="text-xl font-semibold text-gray-700 mb-4">
+                Ask Document Agent (LlamaIndex + Multi-Model)
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Your Question
+                  </label>
+                  <textarea
+                    value={documentQuestion}
+                    onChange={(e) => setDocumentQuestion(e.target.value)}
+                    placeholder="Ask questions about your documents..."
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                    rows={3}
+                  />
+                </div>
+                <button
+                  onClick={handleDocumentQuery}
+                  disabled={documentLoading || !documentQuestion.trim()}
+                  className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {documentLoading ? '🤔 Thinking...' : '📄 Ask Document Agent'}
+                </button>
+                <div className="bg-green-50 rounded-lg p-4 border-l-4 border-green-500">
+                  <p className="text-sm text-green-800">
+                    <strong>Document Agent Features:</strong> Document analysis,
+                    semantic search, multi-model support (OpenAI, Gemini,
+                    Ollama), and intelligent document processing using
+                    LlamaIndex.
+                  </p>
+                </div>
+              </div>
+              {documentResponse && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold text-gray-700 mb-2">
+                    Response
+                  </h3>
+                  <div className="bg-gray-50 rounded-lg p-4 border-l-4 border-green-500">
+                    <p className="text-gray-800 whitespace-pre-wrap">
+                      {documentResponse}
                     </p>
                   </div>
                 </div>
@@ -395,6 +617,8 @@ function App() {
           <p>
             {activeTab === 'direct'
               ? 'Powered by NestJS + FastAPI + LangGraph + OpenAI + SQLite Database'
+              : activeTab === 'documents'
+              ? 'Powered by NestJS + FastAPI + LlamaIndex + Multiple AI Models (OpenAI, Gemini, Ollama)'
               : 'Powered by NestJS + React + LlamaIndex + Multiple AI Models'}
           </p>
         </div>

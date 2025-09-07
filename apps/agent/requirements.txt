@@ -1,9 +1,23 @@
+# FastAPI and Web Framework
 fastapi>=0.104.1
 uvicorn[standard]>=0.24.0
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+
+# LangChain and LangGraph (Database Agent)
 langchain>=0.1.0
 langchain-openai>=0.0.5
 langchain-community>=0.0.10
 langgraph>=0.0.20
-python-dotenv>=1.0.0
-pydantic>=2.5.0
 wikipedia>=1.4.0
+
+# LlamaIndex (Document Agent)
+llama-index>=0.10.0
+llama-index-llms-openai>=0.1.0
+llama-index-llms-ollama>=0.1.0
+llama-index-llms-google-genai>=0.1.0
+llama-index-embeddings-openai>=0.1.0
+llama-index-embeddings-ollama>=0.1.0
+
+# Additional utilities
+requests>=2.31.0
