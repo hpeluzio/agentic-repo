@@ -1,15 +1,15 @@
-# 🤖 AI Agentic System
+# 🤖 AI Agents
 
-A powerful AI-powered system focused on database analysis using LangGraph. Built with NestJS, React, and FastAPI. Features a sophisticated database agent with SQL generation capabilities and natural language querying.
+A powerful AI-powered system with dual agents: **Database Agent** for SQL analysis and **RAG Agent** for document search. Built with NestJS, React, and FastAPI. Features sophisticated role-based permissions and natural language querying.
 
 ## 🏗️ Architecture
 
 ```
-ai-agentic/
+ai-agents/
 ├── apps/
 │   ├── backend/         → NestJS (REST API Gateway)
-│   ├── frontend/        → React + Tailwind CSS (Database Chat Interface)
-│   └── agent/           → FastAPI + LangGraph (Database Agent)
+│   ├── frontend/        → React + Tailwind CSS (Dual Agent Interface)
+│   └── agent/           → FastAPI + LangGraph (Database + RAG Agents)
 ├── docker-compose.yml
 ├── README.md
 ```
@@ -24,6 +24,22 @@ ai-agentic/
 - **Real-time Queries**: Direct database interaction via LangGraph
 - **SQL Information**: Detailed query execution information
 - **Multi-step Reasoning**: Complex queries broken down into logical steps
+- **Role-based Access**: Admin and Manager roles with different permission levels
+
+### 📚 RAG Agent
+
+- **Document Search**: Search through company documents and policies
+- **Intelligent Retrieval**: Smart document matching with relevance scoring
+- **Multiple Categories**: Policies, procedures, benefits, and general information
+- **Source Attribution**: Shows which documents were used for answers
+- **Public Access**: All employees can access company documents
+- **Real-time Search**: Instant answers from document knowledge base
+
+### 🔐 Role-Based Permissions
+
+- **Employee**: Access to RAG Agent (company documents)
+- **Manager**: Access to RAG Agent + basic database metrics
+- **Admin**: Full access to both Database and RAG Agents
 
 ## 🚀 Quick Start
 
@@ -39,14 +55,14 @@ ai-agentic/
 
 ```bash
 git clone <repository>
-cd agentic-repo
+cd ai-agents
 pnpm install
 ```
 
 2. **Install Python dependencies:**
 
 ```bash
-# For Database Agent
+# For AI Agents
 cd apps/agent
 python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
@@ -58,14 +74,14 @@ pip install -r requirements.txt
 1. **Set up environment variables:**
 
 ```bash
-# Create .env file for database agent
+# Create .env file for AI agents
 cd apps/agent
 echo "OPENAI_API_KEY=your_openai_api_key_here" > .env
 echo "PORT=8000" >> .env
 echo "HOST=0.0.0.0" >> .env
 ```
 
-2. **Start the database agent:**
+2. **Start the AI agents:**
 
 ```bash
 cd apps/agent
@@ -89,9 +105,9 @@ pnpm run dev
 
 5. **Access the application:**
 
-- Frontend: http://localhost:5173 (Database Chat Interface)
+- Frontend: http://localhost:5173 (Dual Agent Interface)
 - Backend API: http://localhost:3000
-- Database Agent: http://localhost:8000
+- AI Agents: http://localhost:8000
 
 ## 🤖 AI Models
 
@@ -117,12 +133,38 @@ echo "OPENAI_API_KEY=sk-your-key-here" >> apps/agent/.env
 
 The system includes a mock e-commerce database with the following tables:
 
-- **customers**: Customer information
+- **users**: Customer information
 - **products**: Product catalog with categories
 - **orders**: Order records with dates and amounts
-- **order_items**: Individual items within orders
 
-Sample data is automatically loaded when the agent starts.
+Sample data includes orders from August and September 2025 for comprehensive analysis.
+
+## 📚 Available Documents
+
+The RAG Agent has access to 11 company documents across 4 categories:
+
+### Policies
+
+- Vacation Policy
+- Remote Work Policy
+- Code of Conduct
+
+### Procedures
+
+- Employee Onboarding Process
+- Expense Reimbursement Procedure
+- Performance Review Process
+
+### Benefits
+
+- Health Insurance Benefits
+- Retirement Plan Benefits
+- Professional Development Benefits
+
+### General
+
+- Company History
+- Mission, Vision & Values
 
 ## 🔌 API Endpoints
 
@@ -134,7 +176,8 @@ Sample data is automatically loaded when the agent starts.
 POST /chat/database
 Authorization: Bearer test-token
 {
-  "message": "Which customer bought products from all categories?"
+  "message": "Which customer bought products from all categories?",
+  "user_role": "admin"
 }
 ```
 
@@ -159,7 +202,7 @@ Response:
 }
 ```
 
-### 📚 RAG Agent (Coming Soon)
+### 📚 RAG Agent
 
 #### Chat with RAG Agent
 
@@ -167,14 +210,37 @@ Response:
 POST /chat/rag
 Authorization: Bearer test-token
 {
-  "message": "What is the main topic of the documents?"
+  "message": "What is the vacation policy?"
 }
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "response": "Based on the company documents, here's what I found about 'vacation policy'...",
+  "timestamp": "2025-09-07T16:24:03.988685",
+  "sources": [
+    {
+      "title": "Vacation Policy",
+      "category": "policies",
+      "relevance_score": 5
+    }
+  ]
+}
+```
+
+#### Get Available Documents
+
+```bash
+GET /rag/documents
 ```
 
 ### System Health Check
 
 ```bash
-POST /chat/health
+GET /chat/health
 ```
 
 ## 🐳 Docker Setup
@@ -200,7 +266,7 @@ cd apps/frontend
 pnpm run dev
 ```
 
-### Database Agent
+### AI Agents
 
 ```bash
 cd apps/agent
@@ -217,50 +283,68 @@ python3 main.py
 curl -X POST http://localhost:3000/chat/database \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer test-token" \
-  -d '{"message": "How many orders were made in September 2025?"}'
+  -d '{"message": "How many orders were made in August 2025?", "user_role": "admin"}'
 
-# Test RAG agent (placeholder)
+# Test with different roles
+curl -X POST http://localhost:3000/chat/database \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer test-token" \
+  -d '{"message": "What is the total revenue?", "user_role": "employee"}'
+# Response: Access denied for employees
+```
+
+### Test RAG Agent
+
+```bash
+# Test document search
 curl -X POST http://localhost:3000/chat/rag \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer test-token" \
-  -d '{"message": "What is the main topic?"}'
+  -d '{"message": "What are the health insurance benefits?"}'
 
-# Test health check
-curl -X POST http://localhost:3000/chat/health
+# Test available documents
+curl -X GET http://localhost:3000/rag/documents
 ```
 
-### Test Database Agent Directly
+### Test AI Agents Directly
 
 ```bash
-# Test database agent directly (bypassing NestJS)
+# Test database agent directly
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
-  -d '{"message": "How many customers do we have?"}'
+  -d '{"message": "How many customers do we have?", "user_role": "admin"}'
+
+# Test RAG agent directly
+curl -X POST http://localhost:8000/rag \
+  -H "Content-Type: application/json" \
+  -d '{"message": "vacation policy"}'
 ```
 
 ## 💡 Example Queries
 
 ### Database Agent Examples
 
-- "Which customer bought products from all categories?"
-- "How many orders were made in September 2025?"
-- "What are the top 5 customers who spent the most?"
+- "How many orders were made in August 2025?"
+- "What is the total revenue for September?"
+- "Which customer spent the most money?"
 - "How many products do we have in the Electronics category?"
-- "Who bought an iPhone?"
-- "What is the most expensive product?"
+- "Compare revenue between August and September"
+- "What are the top 5 customers by total spending?"
 
-### Advanced Database Queries
+### RAG Agent Examples
 
-- "Show me the customer with the highest total spending"
-- "What products are most popular in each category?"
-- "Find customers who haven't made any orders"
-- "Calculate the average order value by month"
+- "What is the vacation policy?"
+- "How does the onboarding process work?"
+- "What are the health insurance benefits?"
+- "What is the company's mission?"
+- "How do I submit an expense report?"
+- "What is the remote work policy?"
 
 ## 🏗️ Tech Stack
 
 - **Backend**: NestJS, TypeScript
 - **Frontend**: React, Vite, Tailwind CSS
-- **Database Agent**: FastAPI, LangGraph, Python
+- **AI Agents**: FastAPI, LangGraph, Python
 - **Database**: SQLite (with mock e-commerce data)
 - **AI Models**: OpenAI GPT models
 - **Package Manager**: pnpm
@@ -286,25 +370,29 @@ This project is licensed under the MIT License.
 
 ## 🔮 Future Enhancements
 
-- [ ] RAG (Retrieval-Augmented Generation) for document processing
+- [ ] Advanced RAG with vector embeddings
 - [ ] Conversation history
 - [ ] Advanced SQL query visualization
 - [ ] Export functionality
-- [ ] User authentication
+- [ ] User authentication system
 - [ ] Multi-user support
 - [ ] API rate limiting
 - [ ] WebSocket real-time updates
 - [ ] Database schema visualization
 - [ ] Query performance analytics
+- [ ] Document upload interface
+- [ ] Advanced search filters
 
 ## 🎯 Why This System?
 
-- **Database Intelligence**: Natural language to SQL conversion with AI
+- **Dual Agent Architecture**: Database analysis + Document search
+- **Role-based Security**: Different access levels for different users
+- **Natural Language Interface**: Ask questions in plain English
 - **LangGraph Integration**: Multi-step reasoning for complex queries
 - **Real-time Analytics**: Get instant insights from your data
-- **Modern Architecture**: Clean separation between frontend, backend, and AI agent
-- **Scalability**: Easy to add new features and database connections
-- **Learning Platform**: Perfect for understanding AI agents and database interactions
+- **Modern Architecture**: Clean separation between frontend, backend, and AI agents
+- **Scalability**: Easy to add new features and data sources
+- **Learning Platform**: Perfect for understanding AI agents and RAG systems
 - **Open Source**: Full control over your AI system
 - **Production Ready**: Built with enterprise-grade technologies
 

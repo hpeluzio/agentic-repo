@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
   Headers,
   HttpException,
@@ -154,7 +155,7 @@ export class ChatController {
     }
   }
 
-  @Post('health')
+  @Get('health')
   async healthCheck() {
     try {
       // Check if the Python service is running

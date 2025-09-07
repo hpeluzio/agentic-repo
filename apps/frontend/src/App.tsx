@@ -45,7 +45,7 @@ function App() {
       const res = await fetch('http://localhost:3000/chat/health');
       const data = await res.json();
       if (data.status === 'healthy') {
-        setRagStatus('✅ RAG Agent: Ready (Coming Soon)');
+        setRagStatus('✅ RAG Agent: Ready');
       } else {
         setRagStatus('❌ RAG Agent: Error');
       }
@@ -288,7 +288,7 @@ function App() {
         <div className="text-center mt-12 text-gray-500">
           <p>Built with ❤️ using NestJS, React, FastAPI, and LangGraph</p>
           <p className="text-sm mt-2">
-            Database Agent: OpenAI GPT models | RAG Agent: Coming soon
+            Database Agent: OpenAI GPT models | RAG Agent: Document Search
           </p>
         </div>
       </div>
