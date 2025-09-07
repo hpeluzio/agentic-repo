@@ -95,24 +95,24 @@ def insert_mock_data(cursor):
     
     # Mock orders
     orders = [
-        (1, 1, 1, 999.99),  # João comprou iPhone
-        (1, 4, 2, 399.98),  # João comprou 2 Nike
-        (2, 3, 1, 899.99),  # Maria comprou Samsung
-        (2, 6, 3, 269.97),  # Maria comprou 3 Jeans
-        (3, 2, 1, 2499.99), # Pedro comprou MacBook
-        (3, 9, 1, 399.99),  # Pedro comprou Apple Watch
-        (4, 5, 2, 359.98),  # Ana comprou 2 Adidas
-        (4, 7, 5, 149.95),  # Ana comprou 5 T-shirts
-        (5, 1, 1, 999.99),  # Carlos comprou iPhone
-        (5, 8, 1, 159.99),  # Carlos comprou Ray-Ban
-        (6, 2, 1, 2499.99), # Lucia comprou MacBook
-        (6, 1, 1, 999.99),  # Lucia comprou iPhone
-        (6, 10, 1, 299.99), # Lucia comprou Sony Headphones
-        (7, 3, 1, 899.99),  # Roberto comprou Samsung
-        (7, 4, 1, 199.99),  # Roberto comprou Nike
-        (8, 9, 1, 399.99),  # Fernanda comprou Apple Watch
-        (8, 5, 3, 539.97),  # Fernanda comprou 3 Adidas
-        (8, 6, 2, 179.98)   # Fernanda comprou 2 Jeans
+        (1, 1, 1, 999.99),  # João bought iPhone
+        (1, 4, 2, 399.98),  # João bought 2 Nike
+        (2, 3, 1, 899.99),  # Maria bought Samsung
+        (2, 6, 3, 269.97),  # Maria bought 3 Jeans
+        (3, 2, 1, 2499.99), # Pedro bought MacBook
+        (3, 9, 1, 399.99),  # Pedro bought Apple Watch
+        (4, 5, 2, 359.98),  # Ana bought 2 Adidas
+        (4, 7, 5, 149.95),  # Ana bought 5 T-shirts
+        (5, 1, 1, 999.99),  # Carlos bought iPhone
+        (5, 8, 1, 159.99),  # Carlos bought Ray-Ban
+        (6, 2, 1, 2499.99), # Lucia bought MacBook
+        (6, 1, 1, 999.99),  # Lucia bought iPhone
+        (6, 10, 1, 299.99), # Lucia bought Sony Headphones
+        (7, 3, 1, 899.99),  # Roberto bought Samsung
+        (7, 4, 1, 199.99),  # Roberto bought Nike
+        (8, 9, 1, 399.99),  # Fernanda bought Apple Watch
+        (8, 5, 3, 539.97),  # Fernanda bought 3 Adidas
+        (8, 6, 2, 179.98)   # Fernanda bought 2 Jeans
     ]
     
     cursor.executemany('''

@@ -7,6 +7,7 @@ It receives messages from NestJS and returns agent responses.
 """
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 import os
@@ -30,6 +31,15 @@ app = FastAPI(
     title="LangGraph Agent API",
     description="FastAPI service for LangGraph agent",
     version="1.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify exact origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Global agent instance

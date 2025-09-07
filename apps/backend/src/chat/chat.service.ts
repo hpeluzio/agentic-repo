@@ -24,7 +24,7 @@ export class ChatService {
             timestamp: new Date().toISOString(),
           },
           {
-            timeout: 30000, // 30 segundos timeout
+            timeout: 30000, // 30 seconds timeout
             headers: {
               'Content-Type': 'application/json',
             },
