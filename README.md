@@ -1,38 +1,29 @@
 # 🤖 AI Agentic System
 
-A powerful AI-powered system with dual functionality: document querying and database analysis. Built with NestJS, React, FastAPI, and LangGraph. Supports multiple AI models and includes a sophisticated database agent with SQL generation capabilities.
+A powerful AI-powered system focused on database analysis using LangGraph. Built with NestJS, React, and FastAPI. Features a sophisticated database agent with SQL generation capabilities and natural language querying.
 
 ## 🏗️ Architecture
 
 ```
 ai-agentic/
 ├── apps/
-│   ├── backend/         → NestJS (REST API)
-│   ├── frontend/        → React + Tailwind CSS (Dual-tab interface)
-│   ├── agent/           → FastAPI + LangGraph (Database Agent)
-│   └── llama-bridge/    → Python (LlamaIndex)
+│   ├── backend/         → NestJS (REST API Gateway)
+│   ├── frontend/        → React + Tailwind CSS (Database Chat Interface)
+│   └── agent/           → FastAPI + LangGraph (Database Agent)
 ├── docker-compose.yml
 ├── README.md
 ```
 
 ## ✨ Features
 
-### 🗄️ Database Agent (New!)
+### 🗄️ Database Agent
 
-- **SQL Generation**: Natural language to SQL conversion
+- **SQL Generation**: Natural language to SQL conversion using LangGraph
 - **Database Analysis**: Query e-commerce data with AI insights
 - **Customer Analytics**: Top customers, purchase patterns, product analysis
 - **Real-time Queries**: Direct database interaction via LangGraph
 - **SQL Information**: Detailed query execution information
-
-### 📚 Document Processing
-
-- **Multi-Model Support**: Choose between OpenAI, Google Gemini, and local Ollama models
-- **Document Processing**: Upload and query documents with AI-powered insights
-- **Real-time UI**: Modern React interface with dual-tab system
-- **Local & Cloud**: Run locally with Ollama or use cloud APIs
-- **No Rate Limits**: Unlimited queries with local models
-- **Privacy First**: Keep your data local with Ollama models
+- **Multi-step Reasoning**: Complex queries broken down into logical steps
 
 ## 🚀 Quick Start
 
@@ -40,7 +31,6 @@ ai-agentic/
 
 - Node.js 18+ and pnpm
 - Python 3.8+
-- Ollama (for local models)
 - OpenAI API Key (for database agent)
 
 ### Installation
@@ -56,37 +46,11 @@ pnpm install
 2. **Install Python dependencies:**
 
 ```bash
-# For LlamaIndex (document processing)
-cd apps/llama-bridge
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install llama-index llama-index-llms-ollama
-
 # For Database Agent
 cd apps/agent
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-3. **Install Ollama (for local models):**
-
-```bash
-# macOS
-brew install ollama
-
-# Linux
-curl -fsSL https://ollama.ai/install.sh | sh
-
-# Start Ollama
-brew services start ollama  # macOS
-sudo systemctl start ollama  # Linux
-```
-
-4. **Download a model:**
-
-```bash
-ollama pull llama3.1:8b
 ```
 
 ### Running the System
@@ -125,7 +89,7 @@ pnpm run dev
 
 5. **Access the application:**
 
-- Frontend: http://localhost:5173 (or 5174 if 5173 is busy)
+- Frontend: http://localhost:5173 (Database Chat Interface)
 - Backend API: http://localhost:3000
 - Database Agent: http://localhost:8000
 
@@ -133,28 +97,11 @@ pnpm run dev
 
 ### Supported Models
 
-| Provider          | Models                                              | Setup Required | Cost        |
-| ----------------- | --------------------------------------------------- | -------------- | ----------- |
-| **Ollama**        | llama3.1:8b, llama3.1:70b, mistral:7b, codellama:7b | Install Ollama | Free        |
-| **OpenAI**        | gpt-3.5-turbo, gpt-4, gpt-4-turbo                   | API Key        | Pay-per-use |
-| **Google Gemini** | gemini-pro, gemini-pro-vision                       | API Key        | Pay-per-use |
+| Provider   | Models                            | Setup Required | Cost        |
+| ---------- | --------------------------------- | -------------- | ----------- |
+| **OpenAI** | gpt-3.5-turbo, gpt-4, gpt-4-turbo | API Key        | Pay-per-use |
 
 ### Model Setup
-
-#### Ollama (Recommended - Free & Local)
-
-```bash
-# Install Ollama
-brew install ollama  # macOS
-curl -fsSL https://ollama.ai/install.sh | sh  # Linux
-
-# Start Ollama service
-brew services start ollama
-
-# Download models
-ollama pull llama3.1:8b
-ollama pull mistral:7b
-```
 
 #### OpenAI
 
@@ -163,41 +110,19 @@ ollama pull mistral:7b
 export OPENAI_API_KEY=sk-your-key-here
 
 # Or add to .env file
-echo "OPENAI_API_KEY=sk-your-key-here" >> apps/backend/.env
+echo "OPENAI_API_KEY=sk-your-key-here" >> apps/agent/.env
 ```
 
-#### Google Gemini
+## 📊 Database Schema
 
-```bash
-# Set your API key
-export GEMINI_API_KEY=your-gemini-key-here
+The system includes a mock e-commerce database with the following tables:
 
-# Or add to .env file
-echo "GEMINI_API_KEY=your-gemini-key-here" >> apps/backend/.env
-```
+- **customers**: Customer information
+- **products**: Product catalog with categories
+- **orders**: Order records with dates and amounts
+- **order_items**: Individual items within orders
 
-## 📚 Adding Documents
-
-1. **Create documents directory:**
-
-```bash
-mkdir apps/llama-bridge/documents
-```
-
-2. **Add your files:**
-
-```bash
-# Copy your documents to the directory
-cp your-document.pdf apps/llama-bridge/documents/
-cp your-text.txt apps/llama-bridge/documents/
-```
-
-3. **Supported formats:**
-
-- Text files (.txt, .md)
-- PDF files (.pdf)
-- Word documents (.docx)
-- And more via LlamaIndex
+Sample data is automatically loaded when the agent starts.
 
 ## 🔌 API Endpoints
 
@@ -240,40 +165,10 @@ Response:
 POST /chat/health
 ```
 
-### 📚 Document Processing Endpoints
-
-#### Query Documents
-
-```bash
-POST /agent/query
-{
-  "question": "What is the main topic?",
-  "modelConfig": {
-    "provider": "ollama",
-    "model": "llama3.1:8b"
-  }
-}
-```
-
-### Get Available Models
-
-```bash
-GET /agent/models
-```
-
 ### System Status
 
 ```bash
-GET /agent/status
-```
-
-### Add Document
-
-```bash
-POST /agent/add-document
-{
-  "filePath": "/path/to/document.pdf"
-}
+GET /health
 ```
 
 ## 🐳 Docker Setup
@@ -299,12 +194,12 @@ cd apps/frontend
 pnpm run dev
 ```
 
-### Python Bridge
+### Database Agent
 
 ```bash
-cd apps/llama-bridge
+cd apps/agent
 source venv/bin/activate
-python query_engine.py "Your question here"
+python3 main.py
 ```
 
 ## 🧪 Testing
@@ -322,18 +217,19 @@ curl -X POST http://localhost:3000/chat \
 curl -X POST http://localhost:3000/chat/health
 ```
 
-### Test Document Processing
+### Test Database Agent
 
 ```bash
-# Test Python script
-cd apps/llama-bridge
-source venv/bin/activate
-python query_engine.py "What is in the sample document?"
-
-# Test backend API
-curl -X POST http://localhost:3000/agent/query \
+# Test database agent directly
+curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
-  -d '{"question": "Test question"}'
+  -d '{"message": "How many customers do we have?"}'
+
+# Test through NestJS gateway
+curl -X POST http://localhost:3000/chat \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer test-token" \
+  -d '{"message": "How many customers do we have?"}'
 ```
 
 ## 💡 Example Queries
@@ -347,21 +243,20 @@ curl -X POST http://localhost:3000/agent/query \
 - "Who bought an iPhone?"
 - "What is the most expensive product?"
 
-### Document Processing Examples
+### Advanced Database Queries
 
-- "What is the main topic of this document?"
-- "Summarize the key points"
-- "What are the important dates mentioned?"
-- "Extract all the names mentioned"
+- "Show me the customer with the highest total spending"
+- "What products are most popular in each category?"
+- "Find customers who haven't made any orders"
+- "Calculate the average order value by month"
 
 ## 🏗️ Tech Stack
 
 - **Backend**: NestJS, TypeScript
 - **Frontend**: React, Vite, Tailwind CSS
 - **Database Agent**: FastAPI, LangGraph, Python
-- **AI Engine**: LlamaIndex, Python
 - **Database**: SQLite (with mock e-commerce data)
-- **Models**: OpenAI, Google Gemini, Ollama
+- **AI Models**: OpenAI GPT models
 - **Package Manager**: pnpm
 - **Containerization**: Docker Compose
 
@@ -385,29 +280,28 @@ This project is licensed under the MIT License.
 
 ## 🔮 Future Enhancements
 
-- [ ] File upload interface
-- [ ] Document management UI
+- [ ] RAG (Retrieval-Augmented Generation) for document processing
 - [ ] Conversation history
-- [ ] Multiple document collections
-- [ ] Advanced search filters
+- [ ] Advanced SQL query visualization
 - [ ] Export functionality
 - [ ] User authentication
 - [ ] Multi-user support
 - [ ] API rate limiting
 - [ ] WebSocket real-time updates
+- [ ] Database schema visualization
+- [ ] Query performance analytics
 
 ## 🎯 Why This System?
 
-- **Dual Functionality**: Both document processing and database analysis in one system
-- **SQL Generation**: Natural language to SQL conversion with AI
-- **Flexibility**: Choose the AI model that fits your needs
-- **Cost Control**: Use free local models or paid cloud APIs
-- **Privacy**: Keep sensitive data local with Ollama
+- **Database Intelligence**: Natural language to SQL conversion with AI
+- **LangGraph Integration**: Multi-step reasoning for complex queries
 - **Real-time Analytics**: Get instant insights from your data
-- **Scalability**: Easy to add new models and features
-- **Modern Stack**: Built with the latest technologies (NestJS, React, FastAPI, LangGraph)
+- **Modern Architecture**: Clean separation between frontend, backend, and AI agent
+- **Scalability**: Easy to add new features and database connections
+- **Learning Platform**: Perfect for understanding AI agents and database interactions
 - **Open Source**: Full control over your AI system
+- **Production Ready**: Built with enterprise-grade technologies
 
 ---
 
-**Built with ❤️ using NestJS, React, FastAPI, LangGraph, and LlamaIndex**
+**Built with ❤️ using NestJS, React, FastAPI, and LangGraph**

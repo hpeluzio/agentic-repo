@@ -90,7 +90,7 @@ export class ChatController {
     try {
       // Check if the Python service is running
       const response = await firstValueFrom(
-        this.httpService.get<HealthResponse>('http://python-agent:8000/health'),
+        this.httpService.get<HealthResponse>('http://localhost:8000/health'),
       );
 
       return {

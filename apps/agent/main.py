@@ -23,8 +23,8 @@ load_dotenv(env_path)
 # Import our LangGraph agent
 from agent import create_graph_workflow
 
-# Import document agent
-from documents_agent.document_service import DocumentService
+# Document agent disabled - LlamaIndex removed
+# from documents_agent.document_service import DocumentService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -47,7 +47,7 @@ app.add_middleware(
 
 # Global agent instance
 agent = None
-document_service = None
+# document_service = None  # Disabled - LlamaIndex removed
 
 def extract_sql_info_from_messages(messages):
     """Extract SQL execution information from agent messages."""
@@ -170,15 +170,14 @@ class DocumentAddResponse(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     """Initialize the agents on startup."""
-    global agent, document_service
+    global agent  # document_service disabled
     try:
         logger.info("Initializing LangGraph agent...")
         agent = create_graph_workflow()
         logger.info("✅ LangGraph agent initialized successfully")
         
-        logger.info("Initializing Document service...")
-        document_service = DocumentService()
-        logger.info("✅ Document service initialized successfully")
+        # Document service disabled - LlamaIndex removed
+        logger.info("⚠️  Document service disabled - LlamaIndex removed")
         
     except Exception as e:
         logger.error(f"❌ Failed to initialize services: {e}")
@@ -188,7 +187,7 @@ async def startup_event():
 async def health_check():
     """Health check endpoint."""
     return HealthResponse(
-        status="healthy" if agent is not None and document_service is not None else "unhealthy",
+        status="healthy" if agent is not None else "unhealthy",
         timestamp=datetime.now().isoformat(),
         agent_loaded=agent is not None
     )
@@ -253,9 +252,13 @@ async def chat(request: ChatRequest):
             detail=f"Internal server error: {str(e)}"
         )
 
-# Document Agent Endpoints
-@app.post("/documents/query", response_model=DocumentQueryResponse)
-async def query_documents(request: DocumentQueryRequest):
+# Document Agent Endpoints - DISABLED (LlamaIndex removed)
+"""
+All document endpoints are disabled because LlamaIndex was removed.
+These will be reimplemented later for RAG learning.
+
+# @app.post("/documents/query", response_model=DocumentQueryResponse)
+# async def query_documents(request: DocumentQueryRequest):
     """
     Query documents using the document agent.
     """
@@ -295,8 +298,8 @@ async def query_documents(request: DocumentQueryRequest):
             detail=f"Internal server error: {str(e)}"
         )
 
-@app.post("/documents/load", response_model=DocumentLoadResponse)
-async def load_documents(request: DocumentLoadRequest):
+# @app.post("/documents/load", response_model=DocumentLoadResponse)
+# async def load_documents(request: DocumentLoadRequest):
     """
     Load documents from the documents directory.
     """
@@ -331,8 +334,8 @@ async def load_documents(request: DocumentLoadRequest):
             detail=f"Internal server error: {str(e)}"
         )
 
-@app.post("/documents/add", response_model=DocumentAddResponse)
-async def add_document(request: DocumentAddRequest):
+# @app.post("/documents/add", response_model=DocumentAddResponse)
+# async def add_document(request: DocumentAddRequest):
     """
     Add a single document to the index.
     """
@@ -372,8 +375,8 @@ async def add_document(request: DocumentAddRequest):
             detail=f"Internal server error: {str(e)}"
         )
 
-@app.get("/documents/models")
-async def get_available_models():
+# @app.get("/documents/models")
+# async def get_available_models():
     """
     Get available models for document processing.
     """
@@ -398,8 +401,8 @@ async def get_available_models():
             detail=f"Internal server error: {str(e)}"
         )
 
-@app.get("/documents/status")
-async def get_document_status():
+# @app.get("/documents/status")
+# async def get_document_status():
     """
     Get document service status.
     """
@@ -446,6 +449,7 @@ async def root():
             "docs": "/docs"
         }
     }
+"""
 
 if __name__ == "__main__":
     import uvicorn

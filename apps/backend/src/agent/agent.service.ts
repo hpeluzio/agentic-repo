@@ -1,14 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { promisify } from 'util';
-import { exec } from 'child_process';
-import { join } from 'path';
-
-const execAsync = promisify(exec);
-
-interface ExecError extends Error {
-  stdout?: string;
-  stderr?: string;
-}
 
 interface ModelConfig {
   provider: string;
@@ -26,129 +16,92 @@ interface AvailableModels {
   [key: string]: ModelProvider;
 }
 
+interface DocumentQueryResponse {
+  success: boolean;
+  response: string;
+  model_configuration?: ModelConfig;
+  timestamp: string;
+}
+
+interface DocumentModelsResponse {
+  success: boolean;
+  models: AvailableModels;
+  timestamp: string;
+}
+
 @Injectable()
 export class AgentService {
   /**
-   * Query the Python LlamaIndex engine
+   * Query the unified FastAPI document service
    */
   async queryDocuments(
     question: string,
     modelConfig?: ModelConfig,
   ): Promise<string> {
     try {
-      // Path to the Python script and virtual environment
-      const scriptPath = join(process.cwd(), '../llama-bridge/query_engine.py');
-      const venvPath = join(process.cwd(), '../llama-bridge/venv/bin/python');
-      const workingDir = join(process.cwd(), '../llama-bridge');
+      // Use the new unified FastAPI service instead of llama-bridge
+      const agentUrl = process.env.AGENT_URL || 'http://localhost:8000';
 
-      // Build command with model configuration
-      let command = `${venvPath} ${scriptPath} "${question}"`;
-
-      if (modelConfig) {
-        command += ` --model ${modelConfig.provider}:${modelConfig.model}`;
-
-        // Add API key from environment variables based on provider
-        if (modelConfig.provider === 'openai' && process.env.OPENAI_API_KEY) {
-          command += ` --api-key ${process.env.OPENAI_API_KEY}`;
-        } else if (
-          modelConfig.provider === 'gemini' &&
-          process.env.GEMINI_API_KEY
-        ) {
-          command += ` --api-key ${process.env.GEMINI_API_KEY}`;
-        }
-      }
-
-      console.log('Executing Python script with:');
-      console.log('Script path:', scriptPath);
-      console.log('Venv path:', venvPath);
-      console.log('Working dir:', workingDir);
-      console.log('Question:', question);
+      console.log(`[AgentService] Querying documents via FastAPI: ${question}`);
       console.log('Model config:', modelConfig);
 
-      // Execute the Python script with the virtual environment
-      const { stdout, stderr } = await execAsync(command, {
-        cwd: workingDir,
-        env: {
-          ...process.env,
-          PYTHONPATH: workingDir,
-          OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-          GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+      const response = await fetch(`${agentUrl}/documents/query`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          question: question,
+          model_configuration: modelConfig,
+        }),
       });
 
-      console.log('Python stdout:', stdout);
-      if (stderr) {
-        console.error('Python stderr:', stderr);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      return stdout.trim();
+      const data = (await response.json()) as DocumentQueryResponse;
+
+      if (data.success) {
+        console.log('[AgentService] Document query successful');
+        return data.response;
+      } else {
+        console.error('[AgentService] Document query failed:', data.response);
+        return `Error: ${data.response}`;
+      }
     } catch (error) {
-      console.error('Full error object:', error);
-      console.error('Error message:', (error as Error).message);
-
-      const execError = error as ExecError;
-      console.error('Error stdout:', execError.stdout);
-      console.error('Error stderr:', execError.stderr);
-
-      const errorMessage = execError.stderr || (error as Error).message;
-      throw new Error(`Failed to query documents: ${errorMessage}`);
+      console.error('[AgentService] Error calling document service:', error);
+      throw new Error(`Failed to query documents: ${(error as Error).message}`);
     }
   }
 
   /**
-   * Get available models
+   * Get available models from the unified FastAPI service
    */
   async getAvailableModels(): Promise<AvailableModels> {
     try {
-      const scriptPath = join(process.cwd(), '../llama-bridge/query_engine.py');
-      const venvPath = join(process.cwd(), '../llama-bridge/venv/bin/python');
-      const workingDir = join(process.cwd(), '../llama-bridge');
+      const agentUrl = process.env.AGENT_URL || 'http://localhost:8000';
 
-      // Run the script without arguments to get available models
-      const { stdout } = await execAsync(`${venvPath} ${scriptPath}`, {
-        cwd: workingDir,
-        env: {
-          ...process.env,
-          PYTHONPATH: workingDir,
-        },
-      });
+      console.log('[AgentService] Getting available models from FastAPI');
 
-      // Parse the output to extract model information
-      const lines = stdout.split('\n');
-      const models: AvailableModels = {};
+      const response = await fetch(`${agentUrl}/documents/models`);
 
-      for (const line of lines) {
-        if (line.includes('✅') || line.includes('❌')) {
-          // Parse line like: "  ✅ ollama: llama3.1:8b, llama3.1:70b, mistral:7b, codellama:7b"
-          const trimmedLine = line.trim();
-          const status = trimmedLine.startsWith('✅') ? '✅' : '❌';
-          const remainingText = trimmedLine.substring(2).trim(); // Remove ✅ or ❌
-          const colonIndex = remainingText.indexOf(':');
-
-          if (colonIndex !== -1) {
-            const provider = remainingText.substring(0, colonIndex).trim();
-            const modelList = remainingText.substring(colonIndex + 1).trim();
-
-            models[provider] = {
-              available: status === '✅',
-              models: modelList.split(', ').filter((m) => m.trim()),
-              requiresApiKey: provider === 'openai' || provider === 'gemini',
-            };
-          }
-        }
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      console.log('Parsed models:', models);
+      const data = (await response.json()) as DocumentModelsResponse;
 
-      return models;
+      if (data.success) {
+        console.log('[AgentService] Models retrieved successfully');
+        return data.models;
+      } else {
+        throw new Error('Failed to get models from service');
+      }
     } catch (error) {
-      console.error('Error getting available models:', error);
+      console.error('[AgentService] Error getting available models:', error);
+      // Return fallback models if service is unavailable
       const fallbackModels: AvailableModels = {
-        ollama: {
-          available: true,
-          models: ['llama3.1:8b', 'llama3.1:70b', 'mistral:7b', 'codellama:7b'],
-          requiresApiKey: false,
-        },
         openai: {
           available: true,
           models: ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo'],

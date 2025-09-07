@@ -15,45 +15,30 @@ interface AvailableModels {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<
-    'direct' | 'documents' | 'backend'
-  >('direct');
+  const [activeTab, setActiveTab] = useState<'database' | 'backend'>(
+    'database',
+  );
 
-  // Direct Agent Tab State
-  const [directQuestion, setDirectQuestion] = useState('');
-  const [directResponse, setDirectResponse] = useState('');
-  const [directLoading, setDirectLoading] = useState(false);
-  const [directStatus, setDirectStatus] = useState('');
-
-  // Document Agent Tab State
-  const [documentQuestion, setDocumentQuestion] = useState('');
-  const [documentResponse, setDocumentResponse] = useState('');
-  const [documentLoading, setDocumentLoading] = useState(false);
-  const [documentStatus, setDocumentStatus] = useState('');
-  const [documentModels, setDocumentModels] = useState<AvailableModels>({});
-  const [selectedDocumentModel, setSelectedDocumentModel] =
-    useState<ModelConfig>({
-      provider: 'ollama',
-      model: 'llama3.1:8b',
-    });
-
-  // Backend Tab State (existing functionality)
+  // Database Agent Tab State
   const [question, setQuestion] = useState('');
   const [response, setResponse] = useState('');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
+
+  // Backend Tab State (existing functionality)
+  const [backendQuestion, setBackendQuestion] = useState('');
+  const [backendResponse, setBackendResponse] = useState('');
+  const [backendLoading, setBackendLoading] = useState(false);
+  const [backendStatus, setBackendStatus] = useState('');
   const [availableModels, setAvailableModels] = useState<AvailableModels>({});
   const [selectedModel, setSelectedModel] = useState<ModelConfig>({
-    provider: 'ollama',
-    model: 'llama3.1:8b',
+    provider: 'openai',
+    model: 'gpt-3.5-turbo',
   });
 
   useEffect(() => {
     loadAvailableModels();
-    loadDocumentModels();
     checkStatus();
-    checkDirectStatus();
-    checkDocumentStatus();
   }, []);
 
   const loadAvailableModels = async () => {
@@ -68,60 +53,39 @@ function App() {
     }
   };
 
-  const handleQuery = async () => {
-    if (!question.trim()) return;
-
-    setLoading(true);
-    try {
-      const requestBody: { question: string; modelConfig?: ModelConfig } = {
-        question,
-      };
-
-      // Only send modelConfig for non-Ollama models (API keys are handled server-side)
-      if (selectedModel.provider !== 'ollama') {
-        requestBody.modelConfig = selectedModel;
-      }
-
-      const res = await fetch('http://localhost:3000/agent/query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        setResponse(data.response);
-      } else {
-        setResponse('Error: ' + data.message);
-      }
-    } catch {
-      setResponse('Error connecting to backend');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const checkStatus = async () => {
     try {
       const res = await fetch('http://localhost:3000/agent/status');
       const data = await res.json();
-      setStatus(`Status: ${data.status} (${data.timestamp})`);
-    } catch {
-      setStatus('Error checking status');
+      if (data.success) {
+        setStatus('✅ Backend System: Connected');
+      } else {
+        setStatus('❌ Backend System: Error');
+      }
+    } catch (error) {
+      setStatus('❌ Backend System: Connection Error');
     }
   };
 
-  const handleModelChange = (provider: string, model: string) => {
-    setSelectedModel({ provider, model });
+  const checkDatabaseStatus = async () => {
+    try {
+      const res = await fetch('http://localhost:3000/chat/health');
+      const data = await res.json();
+      if (data.status === 'healthy') {
+        setStatus('✅ Database Agent: Connected');
+      } else {
+        setStatus('❌ Database Agent: Error');
+      }
+    } catch (error) {
+      setStatus('❌ Database Agent: Connection Error');
+    }
   };
 
-  // Direct Agent functions
-  const handleDirectQuery = async () => {
-    if (!directQuestion.trim()) return;
+  // Database Agent Functions
+  const handleDatabaseQuery = async () => {
+    if (!question.trim()) return;
 
-    setDirectLoading(true);
+    setLoading(true);
     try {
       const res = await fetch('http://localhost:3000/chat', {
         method: 'POST',
@@ -130,496 +94,252 @@ function App() {
           Authorization: 'Bearer test-token',
         },
         body: JSON.stringify({
-          message: directQuestion,
+          message: question,
         }),
       });
-
       const data = await res.json();
       if (data.success) {
-        setDirectResponse(data.response);
+        setResponse(data.response);
       } else {
-        setDirectResponse(
-          'Error: ' + (data.message || data.response || 'Unknown error'),
-        );
+        setResponse(`Error: ${data.message}`);
       }
     } catch (error) {
-      setDirectResponse('Error connecting to chat endpoint');
+      setResponse('Error: Failed to connect to database agent');
     } finally {
-      setDirectLoading(false);
+      setLoading(false);
     }
   };
 
-  const checkDirectStatus = async () => {
+  // Backend Functions (existing functionality)
+  const handleBackendQuery = async () => {
+    if (!backendQuestion.trim()) return;
+
+    setBackendLoading(true);
     try {
-      const res = await fetch('http://localhost:3000/chat/health', {
+      const res = await fetch('http://localhost:3000/agent/query', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        },
-      });
-      const data = await res.json();
-      setDirectStatus(
-        `Chat Service: ${data.status} (${
-          data.services ? Object.keys(data.services).join(', ') : 'N/A'
-        })`,
-      );
-    } catch {
-      setDirectStatus('Chat Service: Error checking status');
-    }
-  };
-
-  // Document Agent Functions
-  const loadDocumentModels = async () => {
-    try {
-      const res = await fetch('http://localhost:3000/documents/models', {
-        headers: {
-          Authorization: 'Bearer test-token',
-        },
-      });
-      const data = await res.json();
-      if (data.success) {
-        setDocumentModels(data.models);
-      }
-    } catch (error) {
-      console.error('Error loading document models:', error);
-    }
-  };
-
-  const checkDocumentStatus = async () => {
-    try {
-      const res = await fetch('http://localhost:3000/documents/status', {
-        headers: {
-          Authorization: 'Bearer test-token',
-        },
-      });
-      const data = await res.json();
-      if (data.success) {
-        setDocumentStatus(
-          data.status.documents_loaded
-            ? '✅ Documents Loaded'
-            : '⚠️ No Documents',
-        );
-      } else {
-        setDocumentStatus('❌ Service Error');
-      }
-    } catch (error) {
-      setDocumentStatus('❌ Connection Error');
-    }
-  };
-
-  const handleDocumentQuery = async () => {
-    if (!documentQuestion.trim()) return;
-
-    setDocumentLoading(true);
-    try {
-      const res = await fetch('http://localhost:3000/documents/query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer test-token',
         },
         body: JSON.stringify({
-          question: documentQuestion,
-          model_configuration: selectedDocumentModel,
+          question: backendQuestion,
+          modelConfig: selectedModel,
         }),
       });
-
       const data = await res.json();
       if (data.success) {
-        setDocumentResponse(data.response);
+        setBackendResponse(data.response);
       } else {
-        setDocumentResponse(`Error: ${data.response}`);
+        setBackendResponse(`Error: ${data.message}`);
       }
     } catch (error) {
-      setDocumentResponse('Error: Failed to connect to document service');
+      setBackendResponse('Error: Failed to connect to backend');
     } finally {
-      setDocumentLoading(false);
+      setBackendLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-8">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">
             🤖 AI Agentic System
           </h1>
-          <p className="text-gray-600">
-            Query your documents with AI-powered insights
+          <p className="text-lg text-gray-600">
+            Database Analysis with LangGraph Agent
           </p>
         </div>
 
-        {/* Tabs */}
-        <div className="bg-white rounded-lg shadow-md mb-6">
-          <div className="flex border-b">
+        {/* Tab Navigation */}
+        <div className="flex justify-center mb-8">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-1">
             <button
-              onClick={() => setActiveTab('direct')}
-              className={`flex-1 px-6 py-3 text-sm font-medium transition-colors ${
-                activeTab === 'direct'
-                  ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50'
-                  : 'text-gray-500 hover:text-gray-700'
+              onClick={() => setActiveTab('database')}
+              className={`px-6 py-2 rounded-md font-medium transition-colors ${
+                activeTab === 'database'
+                  ? 'bg-blue-500 text-white'
+                  : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              🚀 Database Agent (Port 3000)
-            </button>
-            <button
-              onClick={() => setActiveTab('documents')}
-              className={`flex-1 px-6 py-3 text-sm font-medium transition-colors ${
-                activeTab === 'documents'
-                  ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              📄 Document Agent (Port 3000)
+              🗄️ Database Agent
             </button>
             <button
               onClick={() => setActiveTab('backend')}
-              className={`flex-1 px-6 py-3 text-sm font-medium transition-colors ${
+              className={`px-6 py-2 rounded-md font-medium transition-colors ${
                 activeTab === 'backend'
-                  ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50'
-                  : 'text-gray-500 hover:text-gray-700'
+                  ? 'bg-blue-500 text-white'
+                  : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              🔧 Backend System (Port 3000)
+              🔧 Backend System
             </button>
           </div>
         </div>
 
-        {/* Tab Content */}
-        {activeTab === 'direct' ? (
-          /* Direct Agent Tab */
-          <>
-            {/* Direct Agent Status */}
-            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-700">
-                  Database Agent Status
+        {/* Database Agent Tab */}
+        {activeTab === 'database' && (
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-semibold text-gray-900">
+                  🗄️ Database Agent
                 </h2>
                 <button
-                  onClick={checkDirectStatus}
-                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                  onClick={checkDatabaseStatus}
+                  className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors"
                 >
                   Check Status
                 </button>
               </div>
-              {directStatus && (
-                <p className="mt-2 text-sm text-gray-600">{directStatus}</p>
-              )}
-            </div>
 
-            {/* Direct Agent Query Interface */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold text-gray-700 mb-4">
-                Ask Database Agent (LangGraph + SQLite)
-              </h2>
+              {status && <p className="mb-4 text-sm text-gray-600">{status}</p>}
 
               <div className="space-y-4">
                 <div>
-                  <label
-                    htmlFor="directQuestion"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
-                    Your Question
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Ask about the database:
                   </label>
                   <textarea
-                    id="directQuestion"
-                    value={directQuestion}
-                    onChange={(e) => setDirectQuestion(e.target.value)}
-                    placeholder="Ask anything about the database or general questions..."
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
-                    rows={4}
-                  />
-                </div>
-
-                <div className="text-sm text-gray-600 bg-green-50 p-3 rounded-lg">
-                  <strong>Database Agent Features:</strong> Database queries,
-                  SQL generation, customer analysis, product information, and
-                  general AI assistance via python-agent.
-                </div>
-
-                <button
-                  onClick={handleDirectQuery}
-                  disabled={directLoading || !directQuestion.trim()}
-                  className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {directLoading ? '🤔 Thinking...' : '🚀 Ask Database Agent'}
-                </button>
-              </div>
-
-              {/* Direct Response */}
-              {directResponse && (
-                <div className="mt-6">
-                  <h3 className="text-lg font-semibold text-gray-700 mb-2">
-                    Response
-                  </h3>
-                  <div className="bg-gray-50 rounded-lg p-4 border-l-4 border-green-500">
-                    <p className="text-gray-800 whitespace-pre-wrap">
-                      {directResponse}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </>
-        ) : activeTab === 'documents' ? (
-          /* Document Agent Tab */
-          <>
-            {/* Document Agent Status */}
-            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-700">
-                  Document Agent Status
-                </h2>
-                <button
-                  onClick={checkDocumentStatus}
-                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                >
-                  Check Status
-                </button>
-              </div>
-              {documentStatus && (
-                <p className="mt-2 text-sm text-gray-600">{documentStatus}</p>
-              )}
-            </div>
-
-            {/* Model Selection for Documents */}
-            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <h2 className="text-xl font-semibold text-gray-700 mb-4">
-                Select AI Model for Document Processing
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Provider
-                  </label>
-                  <select
-                    value={selectedDocumentModel.provider}
-                    onChange={(e) =>
-                      setSelectedDocumentModel({
-                        ...selectedDocumentModel,
-                        provider: e.target.value,
-                        model: documentModels[e.target.value]?.models[0] || '',
-                      })
-                    }
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  >
-                    {Object.entries(documentModels).map(([provider, info]) => (
-                      <option
-                        key={provider}
-                        value={provider}
-                        disabled={!info.available}
-                      >
-                        {info.available ? '✅' : '❌'} {provider.toUpperCase()}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Model
-                  </label>
-                  <select
-                    value={selectedDocumentModel.model}
-                    onChange={(e) =>
-                      setSelectedDocumentModel({
-                        ...selectedDocumentModel,
-                        model: e.target.value,
-                      })
-                    }
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  >
-                    {documentModels[selectedDocumentModel.provider]?.models.map(
-                      (model) => (
-                        <option key={model} value={model}>
-                          {model}
-                        </option>
-                      ),
-                    )}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Document Agent Query */}
-            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <h2 className="text-xl font-semibold text-gray-700 mb-4">
-                Ask Document Agent (LlamaIndex + Multi-Model)
-              </h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Your Question
-                  </label>
-                  <textarea
-                    value={documentQuestion}
-                    onChange={(e) => setDocumentQuestion(e.target.value)}
-                    placeholder="Ask questions about your documents..."
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     rows={3}
-                  />
-                </div>
-                <button
-                  onClick={handleDocumentQuery}
-                  disabled={documentLoading || !documentQuestion.trim()}
-                  className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                >
-                  {documentLoading ? '🤔 Thinking...' : '📄 Ask Document Agent'}
-                </button>
-                <div className="bg-green-50 rounded-lg p-4 border-l-4 border-green-500">
-                  <p className="text-sm text-green-800">
-                    <strong>Document Agent Features:</strong> Document analysis,
-                    semantic search, multi-model support (OpenAI, Gemini,
-                    Ollama), and intelligent document processing using
-                    LlamaIndex.
-                  </p>
-                </div>
-              </div>
-              {documentResponse && (
-                <div className="mt-6">
-                  <h3 className="text-lg font-semibold text-gray-700 mb-2">
-                    Response
-                  </h3>
-                  <div className="bg-gray-50 rounded-lg p-4 border-l-4 border-green-500">
-                    <p className="text-gray-800 whitespace-pre-wrap">
-                      {documentResponse}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </>
-        ) : (
-          /* Backend Tab (existing functionality) */
-          <>
-            {/* Status Check */}
-            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-700">
-                  Backend System Status
-                </h2>
-                <button
-                  onClick={checkStatus}
-                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                >
-                  Check Status
-                </button>
-              </div>
-              {status && <p className="mt-2 text-sm text-gray-600">{status}</p>}
-            </div>
-
-            {/* Model Selection */}
-            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <h2 className="text-xl font-semibold text-gray-700 mb-4">
-                AI Model Selection
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {Object.entries(availableModels).map(([provider, info]) => (
-                  <div key={provider} className="border rounded-lg p-4">
-                    <h3 className="font-semibold text-gray-700 mb-2 capitalize">
-                      {provider} {info.available ? '✅' : '❌'}
-                    </h3>
-                    {info.available && (
-                      <div className="space-y-2">
-                        {info.models.map((model) => (
-                          <button
-                            key={model}
-                            onClick={() => handleModelChange(provider, model)}
-                            className={`w-full text-left p-2 rounded text-sm transition-colors ${
-                              selectedModel.provider === provider &&
-                              selectedModel.model === model
-                                ? 'bg-indigo-100 text-indigo-700 border border-indigo-300'
-                                : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-                            }`}
-                          >
-                            {model}
-                          </button>
-                        ))}
-                        {info.requiresApiKey && (
-                          <div className="text-xs text-gray-500 mt-2 p-2 bg-gray-50 rounded">
-                            API key configured in backend
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {!info.available && (
-                      <p className="text-sm text-gray-500">
-                        {provider === 'ollama'
-                          ? 'Install Ollama first'
-                          : 'Install required packages'}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Query Interface */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold text-gray-700 mb-4">
-                Ask a Question
-              </h2>
-
-              <div className="space-y-4">
-                <div>
-                  <label
-                    htmlFor="question"
-                    className="block text-sm font-medium text-gray-700 mb-2"
-                  >
-                    Your Question
-                  </label>
-                  <textarea
-                    id="question"
+                    placeholder="e.g., Which customer bought products from all categories?"
                     value={question}
                     onChange={(e) => setQuestion(e.target.value)}
-                    placeholder="Ask anything about your documents..."
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                    rows={4}
                   />
                 </div>
 
-                <div className="text-sm text-gray-600">
-                  Selected Model:{' '}
-                  <span className="font-medium">
-                    {selectedModel.provider}:{selectedModel.model}
-                  </span>
-                </div>
-
                 <button
-                  onClick={handleQuery}
+                  onClick={handleDatabaseQuery}
                   disabled={loading || !question.trim()}
-                  className="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="w-full py-3 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                 >
-                  {loading ? '🤔 Thinking...' : '🚀 Ask Question'}
+                  {loading ? '🤔 Thinking...' : '🗄️ Ask Database Agent'}
                 </button>
-              </div>
 
-              {/* Response */}
-              {response && (
-                <div className="mt-6">
-                  <h3 className="text-lg font-semibold text-gray-700 mb-2">
-                    Response
-                  </h3>
-                  <div className="bg-gray-50 rounded-lg p-4 border-l-4 border-indigo-500">
-                    <p className="text-gray-800 whitespace-pre-wrap">
+                {response && (
+                  <div className="mt-6 p-4 bg-gray-50 rounded-md">
+                    <h3 className="font-medium text-gray-900 mb-2">
+                      Response:
+                    </h3>
+                    <p className="text-gray-700 whitespace-pre-wrap">
                       {response}
                     </p>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
-          </>
+          </div>
+        )}
+
+        {/* Backend System Tab */}
+        {activeTab === 'backend' && (
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-semibold text-gray-900">
+                  🔧 Backend System
+                </h2>
+                <button
+                  onClick={checkStatus}
+                  className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors"
+                >
+                  Check Status
+                </button>
+              </div>
+
+              {backendStatus && (
+                <p className="mb-4 text-sm text-gray-600">{backendStatus}</p>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Model Configuration:
+                  </label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <select
+                      className="p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      value={selectedModel.provider}
+                      onChange={(e) =>
+                        setSelectedModel({
+                          ...selectedModel,
+                          provider: e.target.value,
+                          model:
+                            availableModels[e.target.value]?.models[0] || '',
+                        })
+                      }
+                    >
+                      {Object.entries(availableModels).map(
+                        ([provider, info]) => (
+                          <option key={provider} value={provider}>
+                            {provider} {info.available ? '✅' : '❌'}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                    <select
+                      className="p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      value={selectedModel.model}
+                      onChange={(e) =>
+                        setSelectedModel({
+                          ...selectedModel,
+                          model: e.target.value,
+                        })
+                      }
+                    >
+                      {availableModels[selectedModel.provider]?.models.map(
+                        (model) => (
+                          <option key={model} value={model}>
+                            {model}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Ask a question:
+                  </label>
+                  <textarea
+                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    rows={3}
+                    placeholder="Enter your question here..."
+                    value={backendQuestion}
+                    onChange={(e) => setBackendQuestion(e.target.value)}
+                  />
+                </div>
+
+                <button
+                  onClick={handleBackendQuery}
+                  disabled={backendLoading || !backendQuestion.trim()}
+                  className="w-full py-3 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {backendLoading ? '🤔 Thinking...' : '🔧 Ask Backend'}
+                </button>
+
+                {backendResponse && (
+                  <div className="mt-6 p-4 bg-gray-50 rounded-md">
+                    <h3 className="font-medium text-gray-900 mb-2">
+                      Response:
+                    </h3>
+                    <p className="text-gray-700 whitespace-pre-wrap">
+                      {backendResponse}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Footer */}
-        <div className="text-center mt-8 text-gray-500 text-sm">
-          <p>
-            {activeTab === 'direct'
-              ? 'Powered by NestJS + FastAPI + LangGraph + OpenAI + SQLite Database'
-              : activeTab === 'documents'
-              ? 'Powered by NestJS + FastAPI + LlamaIndex + Multiple AI Models (OpenAI, Gemini, Ollama)'
-              : 'Powered by NestJS + React + LlamaIndex + Multiple AI Models'}
+        <div className="text-center mt-12 text-gray-500">
+          <p>Built with ❤️ using NestJS, React, FastAPI, and LangGraph</p>
+          <p className="text-sm mt-2">
+            Database Agent: OpenAI GPT models | Document processing: Coming soon
           </p>
         </div>
       </div>
