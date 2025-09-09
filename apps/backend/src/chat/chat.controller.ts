@@ -66,13 +66,8 @@ export class ChatController {
         throw new HttpException('Message is required', HttpStatus.BAD_REQUEST);
       }
 
-      // 3. Validate user role for database access
-      if (!['admin', 'manager'].includes(body.user_role)) {
-        throw new HttpException(
-          'Access denied. Database queries require admin or manager role.',
-          HttpStatus.FORBIDDEN,
-        );
-      }
+      // 3. User role validation is now handled by LLM in the Python agent
+      // No need for rigid role checking here - let the intelligent LLM decide
 
       // 4. Log the request
       console.log(

@@ -70,40 +70,71 @@ def create_wikipedia_tool():
     return WikipediaQueryRun(api_wrapper=api_wrapper)
 
 def check_permissions(state: AgentState):
-    """Check if the user has permission to access database tools."""
+    """Check if the user has permission to access database tools using LLM reasoning."""
     user_role = state.get("user_role", "employee")
     last_message = state["messages"][-1]
     message_content = last_message.content if hasattr(last_message, 'content') else str(last_message)
     
-    # Define sensitive keywords that require higher permissions
-    sensitive_keywords = [
-        "revenue", "profit", "financial", "salary", "compensation", "budget",
-        "customer data", "personal information", "confidential", "sensitive",
-        "delete", "update", "modify", "change", "alter"
-    ]
+    # Initialize LLM for permission checking
+    llm = ChatOpenAI(
+        model="gpt-3.5-turbo",
+        temperature=0.1,  # Low temperature for consistent decisions
+        api_key=os.getenv("OPENAI_API_KEY")
+    )
     
-    # Check if the message contains sensitive information
-    message_lower = message_content.lower()
-    is_sensitive = any(keyword in message_lower for keyword in sensitive_keywords)
-    
-    # Permission logic
-    if user_role == "admin":
-        return {"permission_checked": True, "access_granted": True}
-    elif user_role == "manager":
-        if is_sensitive:
+    # Create permission checking prompt
+    permission_prompt = f"""
+You are a security expert analyzing database queries for permission levels.
+
+User Role: {user_role}
+Query: "{message_content}"
+
+Role Permissions:
+- EMPLOYEE: Can access general company information, product catalogs, basic metrics. CANNOT access financial data, revenue, profit, customer personal information, or sensitive business metrics.
+- MANAGER: Can access business metrics, team information, operational data. CANNOT access highly sensitive financial data like exact revenue, profit margins, or personal salary information.
+- ADMIN: Can access all data including financial information, sensitive metrics, and confidential business data.
+
+Analyze the query and determine:
+1. Is this query appropriate for the user's role?
+2. Does it request sensitive information that should be restricted?
+
+Consider:
+- Context and intent of the query
+- Whether the information is general vs. sensitive
+- If the query is about processes vs. actual data
+- The user's legitimate business needs
+
+Respond with ONLY one word:
+- ALLOWED: Query is appropriate for the user's role
+- BLOCKED: Query requests information beyond the user's permission level
+
+Response:"""
+
+    try:
+        # Get LLM decision
+        response = llm.invoke(permission_prompt)
+        decision = response.content.strip().upper()
+        
+        if decision == "ALLOWED":
+            return {"permission_checked": True, "access_granted": True}
+        else:
+            # Generate appropriate denial message based on role
+            if user_role == "employee":
+                denial_message = "I'm sorry, but this query contains information that requires manager or admin access. Please contact your manager or rephrase your question to focus on general company information."
+            elif user_role == "manager":
+                denial_message = "I'm sorry, but this query contains sensitive information that requires admin-level access. Please contact an administrator or rephrase your question to focus on general business metrics."
+            else:
+                denial_message = "I'm sorry, but there seems to be an issue with your query. Please rephrase your question."
+            
             return {
                 "permission_checked": True, 
                 "access_granted": False,
-                "messages": [AIMessage(content="I'm sorry, but this query contains sensitive information that requires admin-level access. Please contact an administrator or rephrase your question to focus on general business metrics.")]
+                "messages": [AIMessage(content=denial_message)]
             }
-        return {"permission_checked": True, "access_granted": True}
-    else:  # employee
-        if is_sensitive:
-            return {
-                "permission_checked": True, 
-                "access_granted": False,
-                "messages": [AIMessage(content="I'm sorry, but this query contains sensitive information that requires manager or admin access. Please contact your manager or rephrase your question to focus on general company information.")]
-            }
+            
+    except Exception as e:
+        # Fallback to allowing access if LLM fails
+        print(f"Error in permission checking: {e}")
         return {"permission_checked": True, "access_granted": True}
 
 def should_continue(state: AgentState):
