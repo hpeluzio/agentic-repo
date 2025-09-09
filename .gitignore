@@ -241,6 +241,10 @@ dmypy.json
 chroma_db/
 apps/*/chroma_db/
 
+# Mock databases
+*.db
+apps/*/mock_ecommerce.db
+
 # Documents (optional - uncomment if you don't want to track documents)
 # apps/*/documents/
 
