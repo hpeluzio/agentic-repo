@@ -1,7 +1,3 @@
-Perfeito, Henrique! Vamos seguir com a estrutura **monorepo com 3 apps**: `backend` (NestJS), `frontend` (React), e `llama-bridge` (Python com LlamaIndex + Chroma).
-
----
-
 ## 🏗️ Estrutura final do monorepo:
 
 ```
@@ -66,7 +62,7 @@ npx tailwindcss init -p
 No `tailwind.config.js`:
 
 ```js
-content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"]
+content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'];
 ```
 
 No `src/index.css`:
@@ -100,12 +96,12 @@ touch query_engine.py
 Crie esse arquivo na raiz:
 
 ```yaml
-version: "3.9"
+version: '3.9'
 services:
   backend:
     build: ./apps/backend
     ports:
-      - "3000:3000"
+      - '3000:3000'
     volumes:
       - ./apps/backend:/app
     env_file:
@@ -114,7 +110,7 @@ services:
   frontend:
     build: ./apps/frontend
     ports:
-      - "5173:5173"
+      - '5173:5173'
     volumes:
       - ./apps/frontend:/app
 

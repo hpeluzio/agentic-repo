@@ -1,295 +1,469 @@
 import { useState, useEffect } from 'react';
 import './App.css';
 
-function App() {
-  const [activeTab, setActiveTab] = useState<'database' | 'rag'>('database');
+interface Message {
+  id: string;
+  content: string;
+  role: 'user' | 'assistant';
+  timestamp: Date;
+  agent: 'database' | 'rag';
+  sources?: Array<{
+    title: string;
+    category: string;
+    relevance_score: number;
+  }>;
+  sql_info?: {
+    queries_executed: Array<{
+      type: string;
+      description: string;
+      sql_query: string | null;
+    }>;
+    total_execution_time: number;
+    queries_count: number;
+  };
+}
 
-  // User Role State
+function App() {
+  const [activeAgent, setActiveAgent] = useState<'database' | 'rag'>(
+    'database',
+  );
   const [userRole, setUserRole] = useState<'employee' | 'manager' | 'admin'>(
     'employee',
   );
-
-  // Database Agent Tab State
-  const [question, setQuestion] = useState('');
-  const [response, setResponse] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState('');
-
-  // RAG Tab State
-  const [ragQuestion, setRagQuestion] = useState('');
-  const [ragResponse, setRagResponse] = useState('');
-  const [ragLoading, setRagLoading] = useState(false);
-  const [ragStatus, setRagStatus] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
-    checkDatabaseStatus();
-    checkRagStatus();
+    checkSystemStatus();
   }, []);
 
-  const checkDatabaseStatus = async () => {
+  const checkSystemStatus = async () => {
     try {
       const res = await fetch('http://localhost:3000/chat/health');
       const data = await res.json();
-      if (data.status === 'healthy') {
-        setStatus('✅ Database Agent: Connected');
-      } else {
-        setStatus('❌ Database Agent: Error');
-      }
+      console.log('System status:', data);
     } catch {
-      setStatus('❌ Database Agent: Connection Error');
+      console.error('System status check failed');
     }
   };
 
-  const checkRagStatus = async () => {
-    try {
-      const res = await fetch('http://localhost:3000/chat/health');
-      const data = await res.json();
-      if (data.status === 'healthy') {
-        setRagStatus('✅ RAG Agent: Ready');
-      } else {
-        setRagStatus('❌ RAG Agent: Error');
-      }
-    } catch {
-      setRagStatus('❌ RAG Agent: Connection Error');
-    }
-  };
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim() || loading) return;
 
-  // RAG Functions
-  const handleRagQuery = async () => {
-    if (!ragQuestion.trim()) return;
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      content: inputMessage,
+      role: 'user',
+      timestamp: new Date(),
+      agent: activeAgent,
+    };
 
-    setRagLoading(true);
-    try {
-      const res = await fetch('http://localhost:3000/chat/rag', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer test-token',
-        },
-        body: JSON.stringify({
-          message: ragQuestion,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setRagResponse(data.response);
-      } else {
-        setRagResponse(`Error: ${data.message}`);
-      }
-    } catch {
-      setRagResponse('Error: Failed to connect to RAG agent');
-    } finally {
-      setRagLoading(false);
-    }
-  };
-
-  // Database Agent Functions
-  const handleDatabaseQuery = async () => {
-    if (!question.trim()) return;
-
+    setMessages((prev) => [...prev, userMessage]);
+    setInputMessage('');
     setLoading(true);
+
     try {
-      const res = await fetch('http://localhost:3000/chat/database', {
+      const endpoint =
+        activeAgent === 'database' ? '/chat/database' : '/chat/rag';
+      const body =
+        activeAgent === 'database'
+          ? { message: inputMessage, user_role: userRole }
+          : { message: inputMessage };
+
+      const res = await fetch(`http://localhost:3000${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: 'Bearer test-token',
         },
-        body: JSON.stringify({
-          message: question,
-          user_role: userRole,
-        }),
+        body: JSON.stringify(body),
       });
+
       const data = await res.json();
-      if (data.success) {
-        setResponse(data.response);
-      } else {
-        setResponse(`Error: ${data.message}`);
+
+      // Check if the response indicates an error
+      if (!res.ok) {
+        let errorContent = `❌ Error: ${data.message || 'Request failed'}`;
+
+        // Special handling for permission errors
+        if (res.status === 403) {
+          errorContent = `🚫 **Access Denied**\n\n${data.message}\n\n**Current Role:** ${userRole}\n**Required Roles:** Admin or Manager\n\n💡 **Tip:** Switch to Admin or Manager role in the sidebar to access database queries.`;
+        } else if (res.status === 401) {
+          errorContent = `🔐 **Unauthorized**\n\n${data.message}\n\nPlease check your authentication.`;
+        } else if (res.status === 500) {
+          errorContent = `⚠️ **Server Error**\n\n${data.message}\n\nPlease try again later or contact support.`;
+        }
+
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: errorContent,
+          role: 'assistant',
+          timestamp: new Date(),
+          agent: activeAgent,
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+        return;
       }
+
+      // Check if the response is successful
+      if (!data.success) {
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: `❌ Error: ${data.message || 'Request failed'}`,
+          role: 'assistant',
+          timestamp: new Date(),
+          agent: activeAgent,
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+        return;
+      }
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: data.response || 'No response received',
+        role: 'assistant',
+        timestamp: new Date(),
+        agent: activeAgent,
+        sources: data.sources,
+        sql_info: data.sql_info,
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
     } catch {
-      setResponse('Error: Failed to connect to database agent');
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: 'Error: Failed to connect to the agent. Please try again.',
+        role: 'assistant',
+        timestamp: new Date(),
+        agent: activeAgent,
+      };
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  const clearChat = () => {
+    setMessages([]);
+  };
+
+  const newChat = () => {
+    setMessages([]);
+    setInputMessage('');
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            🤖 AI Agentic System
-          </h1>
-          <p className="text-lg text-gray-600">
-            Database Analysis with LangGraph Agent
-          </p>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="flex justify-center mb-8">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-1">
+    <div className="flex h-screen bg-gray-900 text-white">
+      {/* Sidebar */}
+      <div
+        className={`${
+          sidebarOpen ? 'w-64' : 'w-0'
+        } transition-all duration-300 bg-gray-800 border-r border-gray-700 flex flex-col overflow-hidden`}
+      >
+        <div className="header-container sidebar-header">
+          <div className="header-content">
+            <h1 className="header-title">AI Agents</h1>
             <button
-              onClick={() => setActiveTab('database')}
-              className={`px-6 py-2 rounded-md font-medium transition-colors ${
-                activeTab === 'database'
-                  ? 'bg-blue-500 text-white'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
+              onClick={() => setSidebarOpen(false)}
+              className="p-1 hover:bg-gray-700 rounded"
             >
-              🗄️ Database Agent
-            </button>
-            <button
-              onClick={() => setActiveTab('rag')}
-              className={`px-6 py-2 rounded-md font-medium transition-colors ${
-                activeTab === 'rag'
-                  ? 'bg-blue-500 text-white'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              📚 RAG Agent
+              ✕
             </button>
           </div>
         </div>
 
-        {/* Database Agent Tab */}
-        {activeTab === 'database' && (
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-semibold text-gray-900">
-                  🗄️ Database Agent
-                </h2>
-                <button
-                  onClick={checkDatabaseStatus}
-                  className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors"
-                >
-                  Check Status
-                </button>
-              </div>
-
-              {status && <p className="mb-4 text-sm text-gray-600">{status}</p>}
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Ask about the database:
-                  </label>
-                  <textarea
-                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    rows={3}
-                    placeholder="e.g., Which customer bought products from all categories?"
-                    value={question}
-                    onChange={(e) => setQuestion(e.target.value)}
-                  />
-                </div>
-
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-gray-700">
-                      Role:
-                    </label>
-                    <select
-                      value={userRole}
-                      onChange={(e) =>
-                        setUserRole(
-                          e.target.value as 'employee' | 'manager' | 'admin',
-                        )
-                      }
-                      className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="employee">Employee</option>
-                      <option value="manager">Manager</option>
-                      <option value="admin">Admin</option>
-                    </select>
+        <div className="flex-1 p-4 space-y-4">
+          {/* Agent Selection */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-400 mb-2">
+              Select Agent
+            </h3>
+            <div className="space-y-2">
+              <button
+                onClick={() => setActiveAgent('database')}
+                className={`w-full text-left p-3 rounded-lg transition-colors ${
+                  activeAgent === 'database'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span>🗄️</span>
+                  <div>
+                    <div className="font-medium">Database Agent</div>
+                    <div className="text-xs text-gray-400">SQL Analysis</div>
                   </div>
                 </div>
+              </button>
 
-                <button
-                  onClick={handleDatabaseQuery}
-                  disabled={loading || !question.trim()}
-                  className="w-full py-3 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                >
-                  {loading ? '🤔 Thinking...' : '🗄️ Ask Database Agent'}
-                </button>
-
-                {response && (
-                  <div className="mt-6 p-4 bg-gray-50 rounded-md">
-                    <h3 className="font-medium text-gray-900 mb-2">
-                      Response:
-                    </h3>
-                    <p className="text-gray-700 whitespace-pre-wrap">
-                      {response}
-                    </p>
+              <button
+                onClick={() => setActiveAgent('rag')}
+                className={`w-full text-left p-3 rounded-lg transition-colors ${
+                  activeAgent === 'rag'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span>📚</span>
+                  <div>
+                    <div className="font-medium">RAG Agent</div>
+                    <div className="text-xs text-gray-400">Document Search</div>
                   </div>
-                )}
-              </div>
+                </div>
+              </button>
             </div>
           </div>
-        )}
 
-        {/* RAG Agent Tab */}
-        {activeTab === 'rag' && (
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-semibold text-gray-900">
-                  📚 RAG Agent
-                </h2>
-                <button
-                  onClick={checkRagStatus}
-                  className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors"
-                >
-                  Check Status
-                </button>
-              </div>
-
-              {ragStatus && (
-                <p className="mb-4 text-sm text-gray-600">{ragStatus}</p>
+          {/* Role Selection (Database Agent only) */}
+          {activeAgent === 'database' && (
+            <div>
+              <h3 className="text-sm font-medium text-gray-400 mb-2">
+                User Role
+              </h3>
+              <select
+                value={userRole}
+                onChange={(e) =>
+                  setUserRole(
+                    e.target.value as 'employee' | 'manager' | 'admin',
+                  )
+                }
+                className={`w-full p-2 bg-gray-700 border rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  userRole === 'employee'
+                    ? 'border-red-500 bg-red-900/20'
+                    : 'border-gray-600'
+                }`}
+              >
+                <option value="employee">👤 Employee (Limited)</option>
+                <option value="manager">👔 Manager (Full Access)</option>
+                <option value="admin">👑 Admin (Full Access)</option>
+              </select>
+              {userRole === 'employee' && (
+                <div className="mt-2 p-2 bg-red-900/30 border border-red-500/50 rounded text-xs text-red-300">
+                  ⚠️ Employee role has limited database access. Switch to
+                  Manager or Admin for full access.
+                </div>
               )}
+            </div>
+          )}
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Ask about documents:
-                  </label>
-                  <textarea
-                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    rows={3}
-                    placeholder="e.g., What is the main topic of the documents?"
-                    value={ragQuestion}
-                    onChange={(e) => setRagQuestion(e.target.value)}
-                  />
-                </div>
+          {/* Chat Actions */}
+          <div className="space-y-2">
+            <button
+              onClick={newChat}
+              className="w-full p-2 bg-gray-700 hover:bg-gray-600 rounded text-sm transition-colors"
+            >
+              + New Chat
+            </button>
+            <button
+              onClick={clearChat}
+              className="w-full p-2 bg-gray-700 hover:bg-gray-600 rounded text-sm transition-colors"
+            >
+              Clear History
+            </button>
+          </div>
+        </div>
 
-                <button
-                  onClick={handleRagQuery}
-                  disabled={ragLoading || !ragQuestion.trim()}
-                  className="w-full py-3 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                >
-                  {ragLoading ? '🤔 Thinking...' : '📚 Ask RAG Agent'}
-                </button>
-
-                {ragResponse && (
-                  <div className="mt-6 p-4 bg-gray-50 rounded-md">
-                    <h3 className="font-medium text-gray-900 mb-2">
-                      Response:
-                    </h3>
-                    <p className="text-gray-700 whitespace-pre-wrap">
-                      {ragResponse}
-                    </p>
-                  </div>
-                )}
-              </div>
+        {/* User Profile */}
+        <div className="p-4 border-t border-gray-700">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-sm font-medium">
+              US
+            </div>
+            <div>
+              <div className="text-sm font-medium">User</div>
+              <div className="text-xs text-gray-400">Free Plan</div>
             </div>
           </div>
-        )}
+        </div>
+      </div>
 
-        {/* Footer */}
-        <div className="text-center mt-12 text-gray-500">
-          <p>Built with ❤️ using NestJS, React, FastAPI, and LangGraph</p>
-          <p className="text-sm mt-2">
-            Database Agent: OpenAI GPT models | RAG Agent: Document Search
-          </p>
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <div className="header-container main-header">
+          <div className="header-content">
+            <div className="flex items-center gap-3">
+              {!sidebarOpen && (
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="p-2 hover:bg-gray-700 rounded"
+                >
+                  ☰
+                </button>
+              )}
+              <div>
+                <h2 className="header-title">
+                  {activeAgent === 'database'
+                    ? '🗄️ Database Agent'
+                    : '📚 RAG Agent'}
+                </h2>
+                <p className="header-subtitle">
+                  {activeAgent === 'database'
+                    ? 'Ask questions about your database and get SQL insights'
+                    : 'Search through company documents and policies'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span className="text-sm text-gray-400">Online</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {messages.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="text-6xl mb-4">
+                  {activeAgent === 'database' ? '🗄️' : '📚'}
+                </div>
+                <h3 className="text-xl font-semibold mb-2">
+                  {activeAgent === 'database' ? 'Database Agent' : 'RAG Agent'}
+                </h3>
+                <p className="text-gray-400 mb-4">
+                  {activeAgent === 'database'
+                    ? 'Ask me anything about your database. I can help with SQL queries, data analysis, and insights.'
+                    : 'Ask me anything about company documents, policies, and procedures.'}
+                </p>
+                <div className="text-sm text-gray-500">
+                  {activeAgent === 'database' && userRole === 'employee' && (
+                    <div className="mb-4 p-3 bg-red-900/20 border border-red-500/50 rounded-lg">
+                      <p className="text-red-300 font-medium mb-1">
+                        ⚠️ Limited Access - Employee Role
+                      </p>
+                      <p className="text-red-200 text-xs">
+                        You can only ask general questions. For detailed
+                        database analysis, switch to Manager or Admin role in
+                        the sidebar.
+                      </p>
+                    </div>
+                  )}
+                  {activeAgent === 'database' && userRole !== 'employee' && (
+                    <p className="mb-2 text-green-300">
+                      ✅ Full Access -{' '}
+                      {userRole.charAt(0).toUpperCase() + userRole.slice(1)}{' '}
+                      Role
+                    </p>
+                  )}
+                  <p>Type your question below to get started.</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex ${
+                  message.role === 'user' ? 'justify-end' : 'justify-start'
+                }`}
+              >
+                <div
+                  className={`max-w-3xl p-4 rounded-lg ${
+                    message.role === 'user'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-700 text-gray-100'
+                  }`}
+                >
+                  <div className="whitespace-pre-wrap">{message.content}</div>
+
+                  {/* SQL Info for Database Agent */}
+                  {message.role === 'assistant' &&
+                    message.agent === 'database' &&
+                    message.sql_info && (
+                      <div className="mt-3 p-3 bg-gray-800 rounded border-l-4 border-blue-500">
+                        <div className="text-sm font-medium text-blue-400 mb-2">
+                          SQL Execution Info
+                        </div>
+                        <div className="text-xs text-gray-300">
+                          <div>
+                            Queries executed: {message.sql_info.queries_count}
+                          </div>
+                          <div>
+                            Execution time:{' '}
+                            {message.sql_info.total_execution_time}ms
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                  {/* Sources for RAG Agent */}
+                  {message.role === 'assistant' &&
+                    message.agent === 'rag' &&
+                    message.sources && (
+                      <div className="mt-3 p-3 bg-gray-800 rounded border-l-4 border-green-500">
+                        <div className="text-sm font-medium text-green-400 mb-2">
+                          Sources
+                        </div>
+                        <div className="space-y-1">
+                          {message.sources.map((source, index) => (
+                            <div key={index} className="text-xs text-gray-300">
+                              📄 {source.title} ({source.category}) - Score:{' '}
+                              {source.relevance_score}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                  <div className="text-xs text-gray-400 mt-2">
+                    {message.timestamp.toLocaleTimeString()}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+
+          {loading && (
+            <div className="flex justify-start">
+              <div className="bg-gray-700 p-4 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                  <span className="text-gray-300">Thinking...</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Input Area */}
+        <div className="p-4 border-t border-gray-700 bg-gray-800">
+          <div className="input-container">
+            <textarea
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder={`Ask ${
+                activeAgent === 'database'
+                  ? 'about your database'
+                  : 'about documents'
+              }...`}
+              className="input-field"
+              rows={1}
+            />
+            <button
+              onClick={handleSendMessage}
+              disabled={!inputMessage.trim() || loading}
+              className="send-button"
+            >
+              <span>Send</span>
+              <span>→</span>
+            </button>
+          </div>
+          <div className="text-xs text-gray-500 mt-2">
+            Press Enter to send, Shift+Enter for new line
+          </div>
         </div>
       </div>
     </div>
