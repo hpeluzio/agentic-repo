@@ -16,7 +16,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from pathlib import Path
 from langchain_core.messages import HumanMessage
-from rag_service import get_rag_service
+from real_rag_service import get_real_rag_service
 
 # Load environment variables from .env file in the current directory
 env_path = Path(__file__).parent / '.env'
@@ -206,7 +206,7 @@ async def rag_chat(request: RagRequest):
         logger.info(f"Processing RAG query: {request.message[:100]}...")
 
         # Get RAG service
-        rag_service = get_rag_service()
+        rag_service = get_real_rag_service()
         
         # Process the question
         result = rag_service.answer_question(request.message)
@@ -233,7 +233,7 @@ async def rag_chat(request: RagRequest):
 async def get_documents():
     """Get list of available documents."""
     try:
-        rag_service = get_rag_service()
+        rag_service = get_real_rag_service()
         documents = rag_service.get_available_documents()
         categories = rag_service.get_document_categories()
         

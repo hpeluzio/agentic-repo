@@ -56,30 +56,108 @@ class RAGService:
     
     def search_documents(self, query: str, limit: int = 3) -> List[Dict[str, Any]]:
         """Search for relevant documents based on query."""
-        query_lower = query.lower()
+        # Clean the query: remove extra whitespace, newlines, and normalize
+        query_clean = query.strip().replace('\n', ' ').replace('\r', ' ')
+        query_lower = query_clean.lower()
         results = []
+        
+        # Portuguese to English translation mapping for common terms
+        translation_map = {
+            'benefícios': 'benefits',
+            'beneficio': 'benefits',
+            'beneficios': 'benefits',
+            'politica': 'policy',
+            'políticas': 'policies',
+            'politicas': 'policies',
+            'procedimento': 'procedure',
+            'procedimentos': 'procedures',
+            'férias': 'vacation',
+            'ferias': 'vacation',
+            'trabalho remoto': 'remote work',
+            'trabalho': 'work',
+            'funcionario': 'employee',
+            'funcionários': 'employees',
+            'saude': 'health',
+            'saúde': 'health',
+            'seguro': 'insurance',
+            'aposentadoria': 'retirement',
+            'desenvolvimento': 'development',
+            'profissional': 'professional',
+            'empresa': 'company',
+            'missao': 'mission',
+            'missão': 'mission',
+            'visao': 'vision',
+            'visão': 'vision',
+            'valores': 'values',
+            'historico': 'history',
+            'histórico': 'history',
+            'conduta': 'conduct',
+            'codigo': 'code',
+            'código': 'code',
+            'onboarding': 'onboarding',
+            'desempenho': 'performance',
+            'reembolso': 'reimbursement',
+            'despesas': 'expenses',
+            'missão da empresa': 'mission',
+            'visão da empresa': 'vision',
+            'valores da empresa': 'values',
+            'histórico da empresa': 'history',
+            'política de férias': 'vacation policy',
+            'política de trabalho remoto': 'remote work policy',
+            'código de conduta': 'code of conduct',
+            'processo de onboarding': 'onboarding process',
+            'processo de avaliação': 'performance review',
+            'reembolso de despesas': 'expense reimbursement',
+            'seguro de saúde': 'health insurance',
+            'plano de aposentadoria': 'retirement plan',
+            'desenvolvimento profissional': 'professional development'
+        }
+        
+        # Create search terms (original + translated + extracted keywords)
+        search_terms = [query_lower]
+        
+        # Add translation if exact match
+        if query_lower in translation_map:
+            search_terms.append(translation_map[query_lower])
+        
+        # Extract key terms from the query for better matching
+        # Remove common Portuguese words and extract meaningful terms
+        stop_words = {'poderia', 'me', 'dar', 'informacoes', 'informações', 'sobre', 'qual', 'como', 'onde', 'quando', 'por', 'que', 'da', 'do', 'das', 'dos', 'em', 'na', 'no', 'nas', 'nos', 'com', 'para', 'de', 'a', 'o', 'as', 'os', 'um', 'uma', 'uns', 'umas', 'é', 'são', 'foi', 'foram', 'ser', 'estar', 'ter', 'haver', 'fazer', 'dizer', 'ver', 'saber', 'poder', 'querer', 'ir', 'vir', 'chegar', 'sair', 'entrar', 'ficar', 'passar', 'trabalhar', 'viver', 'morar', 'comer', 'beber', 'dormir', 'acordar', 'levantar', 'sentar', 'andar', 'correr', 'parar', 'começar', 'terminar', 'acabar', 'continuar', 'seguir', 'voltar', 'retornar', 'encontrar', 'perder', 'ganhar', 'comprar', 'vender', 'pagar', 'receber', 'dar', 'pegar', 'colocar', 'tirar', 'abrir', 'fechar', 'ligar', 'desligar', 'ligar', 'desligar', 'ligar', 'desligar'}
+        
+        # Extract meaningful words from the query
+        words = re.findall(r'\b\w+\b', query_lower)
+        meaningful_words = [word for word in words if word not in stop_words and len(word) > 2]
+        
+        # Add meaningful words to search terms
+        search_terms.extend(meaningful_words)
+        
+        # Add translations for meaningful words
+        for word in meaningful_words:
+            if word in translation_map:
+                search_terms.append(translation_map[word])
         
         for doc_id, doc in self.documents.items():
             score = 0
             content_lower = doc['content'].lower()
             title_lower = doc['title'].lower()
             
-            # Simple scoring based on keyword matches
-            # Title matches get higher score
-            title_matches = len(re.findall(r'\b' + re.escape(query_lower) + r'\b', title_lower))
-            score += title_matches * 3
-            
-            # Content matches
-            content_matches = len(re.findall(r'\b' + re.escape(query_lower) + r'\b', content_lower))
-            score += content_matches
-            
-            # Category matches
-            if query_lower in doc['category'].lower():
-                score += 2
-            
-            # Partial matches
-            if query_lower in content_lower:
-                score += 1
+            # Search with all terms
+            for term in search_terms:
+                # Title matches get higher score
+                title_matches = len(re.findall(r'\b' + re.escape(term) + r'\b', title_lower))
+                score += title_matches * 3
+                
+                # Content matches
+                content_matches = len(re.findall(r'\b' + re.escape(term) + r'\b', content_lower))
+                score += content_matches
+                
+                # Category matches
+                if term in doc['category'].lower():
+                    score += 2
+                
+                # Partial matches
+                if term in content_lower:
+                    score += 1
             
             if score > 0:
                 results.append({
