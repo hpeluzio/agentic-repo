@@ -2,6 +2,13 @@ import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 
+interface UploadedFile {
+  originalname?: string;
+  mimetype?: string;
+  size?: number;
+  buffer?: Buffer;
+}
+
 @Injectable()
 export class ChatService {
   private readonly AGENT_URL =
@@ -168,6 +175,73 @@ export class ChatService {
 
       throw new HttpException(
         'Failed to communicate with smart agent',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  async sendToOCRAgent(file: UploadedFile): Promise<any> {
+    try {
+      const fileName = file.originalname || 'unknown';
+      console.log(`[ChatService] Sending file to OCR agent: ${fileName}`);
+
+      const fileDetails = {
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
+        bufferLength: file.buffer?.length,
+      };
+      console.log(`[ChatService] File details:`, fileDetails);
+
+      // Create FormData for file upload
+      const formData = new FormData();
+
+      // Ensure we have a proper buffer
+      if (!file.buffer || file.buffer.length === 0) {
+        throw new Error('File buffer is empty or invalid');
+      }
+
+      formData.append(
+        'file',
+        new Blob([file.buffer as unknown as ArrayBuffer], {
+          type: file.mimetype || 'application/octet-stream',
+        }),
+        fileName,
+      );
+
+      // Call FastAPI OCR endpoint
+      const response = await firstValueFrom(
+        this.httpService.post('http://localhost:8000/ocr', formData, {
+          timeout: 120000, // 2 minutes timeout for file processing
+          // Don't set Content-Type manually - let the HTTP client handle it with proper boundary
+        }),
+      );
+
+      console.log(`[ChatService] OCR response received`);
+      return response.data;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      console.error('[ChatService] Error calling OCR agent:', errorMessage);
+
+      if (error && typeof error === 'object' && 'code' in error) {
+        if (error.code === 'ECONNREFUSED') {
+          throw new HttpException(
+            'OCR service is unavailable',
+            HttpStatus.SERVICE_UNAVAILABLE,
+          );
+        }
+
+        if (error.code === 'ECONNABORTED') {
+          throw new HttpException(
+            'OCR service timeout',
+            HttpStatus.REQUEST_TIMEOUT,
+          );
+        }
+      }
+
+      throw new HttpException(
+        'Failed to communicate with OCR agent',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

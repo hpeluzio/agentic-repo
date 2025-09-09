@@ -1,0 +1,16 @@
+LABORATORY RESULTS
+
+Patient: Maria Silva
+Date: 2024-09-09
+
+Complete Blood Count:
+- Hemoglobin: 13.8 g/dL (Normal: 12-16)
+- White Blood Cells: 8.2 K/uL (Normal: 4.5-11)
+- Platelets: 280 K/uL (Normal: 150-450)
+
+Chemistry Panel:
+- Glucose: 88 mg/dL (Normal: 70-100)
+- Creatinine: 0.9 mg/dL (Normal: 0.6-1.2)
+- BUN: 15 mg/dL (Normal: 7-20)
+
+All values within normal range.

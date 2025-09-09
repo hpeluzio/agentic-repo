@@ -6,7 +6,7 @@ interface Message {
   content: string;
   role: 'user' | 'assistant';
   timestamp: Date;
-  agent: 'database' | 'rag' | 'smart';
+  agent: 'database' | 'rag' | 'smart' | 'ocr';
   sources?: Array<{
     title: string;
     category: string;
@@ -27,12 +27,15 @@ interface Message {
     confidence: string;
     reasoning: string;
   };
+  extracted_text?: string;
+  recommendations?: string[];
+  alerts?: string[];
 }
 
 function App() {
-  const [activeAgent, setActiveAgent] = useState<'database' | 'rag' | 'smart'>(
-    'database',
-  );
+  const [activeAgent, setActiveAgent] = useState<
+    'database' | 'rag' | 'smart' | 'ocr'
+  >('database');
   const [userRole, setUserRole] = useState<'employee' | 'manager' | 'admin'>(
     'employee',
   );
@@ -40,6 +43,7 @@ function App() {
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   useEffect(() => {
     checkSystemStatus();
@@ -173,6 +177,60 @@ function App() {
     setInputMessage('');
   };
 
+  const handleFileUpload = async () => {
+    if (!selectedFile || loading) return;
+
+    setLoading(true);
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    try {
+      const response = await fetch('http://localhost:3000/chat/ocr', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer test-token',
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to process file');
+      }
+
+      if (data.success) {
+        // Add OCR result as a message
+        const ocrMessage: Message = {
+          id: Date.now().toString(),
+          content: data.analysis,
+          role: 'assistant',
+          timestamp: new Date(),
+          agent: 'ocr',
+          extracted_text: data.extracted_text,
+          recommendations: data.recommendations,
+          alerts: data.alerts,
+        };
+
+        setMessages((prev) => [...prev, ocrMessage]);
+      }
+    } catch (error) {
+      console.error('Error processing file:', error);
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        content: `❌ Error processing file: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+        role: 'assistant',
+        timestamp: new Date(),
+        agent: 'ocr',
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-gray-900 text-white">
       {/* Sidebar */}
@@ -247,6 +305,23 @@ function App() {
                   <div>
                     <div className="font-medium">Smart Agent</div>
                     <div className="text-xs text-gray-400">Auto-Route</div>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setActiveAgent('ocr')}
+                className={`w-full text-left p-3 rounded-lg transition-colors ${
+                  activeAgent === 'ocr'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span>🏥</span>
+                  <div>
+                    <div className="font-medium">OCR Agent</div>
+                    <div className="text-xs text-gray-400">Lab Analysis</div>
                   </div>
                 </div>
               </button>
@@ -344,14 +419,18 @@ function App() {
                     ? '🗄️ Database Agent'
                     : activeAgent === 'rag'
                     ? '📚 RAG Agent'
-                    : '🧠 Smart Agent'}
+                    : activeAgent === 'smart'
+                    ? '🧠 Smart Agent'
+                    : '🏥 OCR Agent'}
                 </h2>
                 <p className="header-subtitle">
                   {activeAgent === 'database'
                     ? 'Ask questions about your database and get SQL insights'
                     : activeAgent === 'rag'
                     ? 'Search through company documents and policies'
-                    : 'Intelligent agent that automatically routes your queries'}
+                    : activeAgent === 'smart'
+                    ? 'Intelligent agent that automatically routes your queries'
+                    : 'Upload lab exam PDFs for intelligent analysis'}
                 </p>
               </div>
             </div>
@@ -372,21 +451,27 @@ function App() {
                     ? '🗄️'
                     : activeAgent === 'rag'
                     ? '📚'
-                    : '🧠'}
+                    : activeAgent === 'smart'
+                    ? '🧠'
+                    : '🏥'}
                 </div>
                 <h3 className="text-xl font-semibold mb-2">
                   {activeAgent === 'database'
                     ? 'Database Agent'
                     : activeAgent === 'rag'
                     ? 'RAG Agent'
-                    : 'Smart Agent'}
+                    : activeAgent === 'smart'
+                    ? 'Smart Agent'
+                    : 'OCR Agent'}
                 </h3>
                 <p className="text-gray-400 mb-4">
                   {activeAgent === 'database'
                     ? 'Ask me anything about your database. I can help with SQL queries, data analysis, and insights.'
                     : activeAgent === 'rag'
                     ? 'Ask me anything about company documents, policies, and procedures.'
-                    : "Ask me anything! I'll automatically choose the best agent (Database or RAG) to answer your question."}
+                    : activeAgent === 'smart'
+                    ? "Ask me anything! I'll automatically choose the best agent (Database or RAG) to answer your question."
+                    : 'Upload lab exam PDFs or images for intelligent analysis. I can extract text and provide medical insights.'}
                 </p>
                 <div className="text-sm text-gray-500">
                   {(activeAgent === 'database' || activeAgent === 'smart') &&
@@ -412,7 +497,33 @@ function App() {
                       ⚠️ Moderate Access - Manager Role
                     </p>
                   )}
-                  <p>Type your question below to get started.</p>
+                  {activeAgent === 'ocr' ? (
+                    <div className="mt-6">
+                      <div className="mb-4">
+                        <input
+                          type="file"
+                          accept=".pdf,.png,.jpg,.jpeg"
+                          onChange={(e) =>
+                            setSelectedFile(e.target.files?.[0] || null)
+                          }
+                          className="mb-4 p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                        />
+                        <button
+                          onClick={handleFileUpload}
+                          disabled={!selectedFile || loading}
+                          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                        >
+                          {loading ? 'Processing...' : 'Analyze Lab Results'}
+                        </button>
+                      </div>
+                      <p className="text-sm text-gray-400">
+                        Upload PDF or image files of lab exams for intelligent
+                        analysis.
+                      </p>
+                    </div>
+                  ) : (
+                    <p>Type your question below to get started.</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -501,6 +612,52 @@ function App() {
                       </div>
                     )}
 
+                  {/* OCR Info for OCR Agent */}
+                  {message.role === 'assistant' && message.agent === 'ocr' && (
+                    <div className="mt-3 space-y-3">
+                      {/* Extracted Text */}
+                      {message.extracted_text && (
+                        <div className="p-3 bg-gray-800 rounded border-l-4 border-orange-500">
+                          <div className="text-sm font-medium text-orange-400 mb-2">
+                            📄 Extracted Text
+                          </div>
+                          <div className="text-xs text-gray-300 max-h-32 overflow-y-auto">
+                            {message.extracted_text}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Recommendations */}
+                      {message.recommendations &&
+                        message.recommendations.length > 0 && (
+                          <div className="p-3 bg-gray-800 rounded border-l-4 border-green-500">
+                            <div className="text-sm font-medium text-green-400 mb-2">
+                              💡 Recommendations
+                            </div>
+                            <div className="text-xs text-gray-300 space-y-1">
+                              {message.recommendations.map((rec, index) => (
+                                <div key={index}>• {rec}</div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                      {/* Alerts */}
+                      {message.alerts && message.alerts.length > 0 && (
+                        <div className="p-3 bg-gray-800 rounded border-l-4 border-red-500">
+                          <div className="text-sm font-medium text-red-400 mb-2">
+                            🚨 Alerts
+                          </div>
+                          <div className="text-xs text-gray-300 space-y-1">
+                            {message.alerts.map((alert, index) => (
+                              <div key={index}>⚠️ {alert}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="text-xs text-gray-400 mt-2">
                     {message.timestamp.toLocaleTimeString()}
                   </div>
@@ -531,7 +688,11 @@ function App() {
               placeholder={`Ask ${
                 activeAgent === 'database'
                   ? 'about your database'
-                  : 'about documents'
+                  : activeAgent === 'rag'
+                  ? 'about documents'
+                  : activeAgent === 'smart'
+                  ? "anything - I'll route it automatically"
+                  : 'about your uploaded lab results'
               }...`}
               className="input-field"
               rows={1}

@@ -6,7 +6,7 @@ This service provides a REST API for the LangGraph agent.
 It receives messages from NestJS and returns agent responses.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
@@ -18,6 +18,7 @@ from pathlib import Path
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
 from real_rag_service import get_real_rag_service
+from ocr_service import get_ocr_service
 
 # Load environment variables from .env file in the current directory
 env_path = Path(__file__).parent / '.env'
@@ -153,6 +154,14 @@ class SmartResponse(BaseModel):
     routing_info: Optional[Dict[str, Any]] = None
     sql_info: Optional[Dict[str, Any]] = None
     sources: Optional[List[Dict[str, Any]]] = None
+
+class OCRResponse(BaseModel):
+    success: bool
+    extracted_text: str
+    analysis: str
+    recommendations: Optional[List[str]] = None
+    alerts: Optional[List[str]] = None
+    timestamp: str
 
 @app.on_event("startup")
 async def startup_event():
@@ -382,6 +391,61 @@ async def smart_chat(request: ChatRequest):
             detail=f"Internal server error: {str(e)}"
         )
 
+@app.post("/ocr", response_model=OCRResponse)
+async def process_ocr(file: UploadFile = File(...)):
+    """
+    Process lab exam PDF/image with OCR and LLM analysis.
+    """
+    try:
+        # Validate file type
+        allowed_types = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg']
+        if not file.content_type or file.content_type not in allowed_types:
+            logger.warning(f"Invalid file type: {file.content_type}. Allowed: {allowed_types}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file type: {file.content_type}. Only PDF, PNG, JPG, JPEG are allowed"
+            )
+        
+        # Validate file size (max 10MB)
+        max_size = 10 * 1024 * 1024  # 10MB
+        if file.size and file.size > max_size:
+            raise HTTPException(
+                status_code=400,
+                detail="File too large. Maximum size is 10MB"
+            )
+        
+        logger.info(f"Processing OCR file: {file.filename} ({file.content_type}, {file.size} bytes)")
+        
+        # Read file content
+        file_content = await file.read()
+        
+        # Get OCR service and process file
+        ocr_service = get_ocr_service()
+        result = await ocr_service.process_lab_exam(file_content, file.filename or "unknown")
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        logger.info("✅ OCR processing completed successfully")
+        
+        return OCRResponse(
+            success=result["success"],
+            extracted_text=result["extracted_text"],
+            analysis=result["analysis"],
+            recommendations=result["recommendations"],
+            alerts=result["alerts"],
+            timestamp=result["timestamp"]
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error processing OCR: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
 @app.get("/")
 async def root():
     """Root endpoint with API information."""
@@ -399,6 +463,9 @@ async def root():
             },
             "smart_agent": {
                 "chat": "/smart"
+            },
+            "ocr_agent": {
+                "process": "/ocr"
             },
             "docs": "/docs"
         }

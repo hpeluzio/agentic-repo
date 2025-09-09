@@ -6,7 +6,10 @@ import {
   Headers,
   HttpException,
   HttpStatus,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { ChatService } from './chat.service';
@@ -67,6 +70,22 @@ interface SmartResponse {
     category: string;
     relevance_score: number;
   }> | null;
+}
+
+interface OCRResponse {
+  success: boolean;
+  extracted_text: string;
+  analysis: string;
+  recommendations?: string[] | null;
+  alerts?: string[] | null;
+  timestamp: string;
+}
+
+interface UploadedFile {
+  originalname?: string;
+  mimetype?: string;
+  size?: number;
+  buffer?: Buffer;
 }
 
 @Controller('chat')
@@ -220,6 +239,82 @@ export class ChatController {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       console.error('[NestJS] Smart Agent Error:', errorMessage);
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        'Internal server error',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('ocr')
+  @UseInterceptors(FileInterceptor('file'))
+  async processOCR(
+    @UploadedFile() file: UploadedFile,
+    @Headers('authorization') auth: string,
+  ): Promise<OCRResponse> {
+    try {
+      // 1. Validate authentication
+      if (!auth || !auth.startsWith('Bearer ')) {
+        throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+      }
+
+      // 2. Validate file
+      if (!file) {
+        throw new HttpException('File is required', HttpStatus.BAD_REQUEST);
+      }
+
+      // 3. Validate file type
+      const allowedTypes = [
+        'application/pdf',
+        'image/png',
+        'image/jpeg',
+        'image/jpg',
+      ];
+      const fileMimetype = file.mimetype || '';
+      if (!allowedTypes.includes(fileMimetype)) {
+        throw new HttpException(
+          'Invalid file type. Only PDF, PNG, JPG, JPEG are allowed',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // 4. Validate file size (max 10MB)
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      const fileSize = file.size || 0;
+      if (fileSize > maxSize) {
+        throw new HttpException(
+          'File too large. Maximum size is 10MB',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      console.log(
+        `[NestJS] Processing OCR file: ${file.originalname || 'unknown'} (${fileSize} bytes)`,
+      );
+
+      // 5. Call FastAPI OCR Service
+      const ocrResponse = (await this.chatService.sendToOCRAgent(
+        file,
+      )) as OCRResponse;
+
+      // 6. Return response
+      return {
+        success: ocrResponse.success,
+        extracted_text: ocrResponse.extracted_text,
+        analysis: ocrResponse.analysis,
+        recommendations: ocrResponse.recommendations,
+        alerts: ocrResponse.alerts,
+        timestamp: ocrResponse.timestamp,
+      };
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      console.error('[NestJS] OCR Error:', errorMessage);
 
       if (error instanceof HttpException) {
         throw error;
