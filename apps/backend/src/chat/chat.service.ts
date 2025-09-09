@@ -119,6 +119,60 @@ export class ChatService {
     }
   }
 
+  async sendToSmartAgent(message: string, userRole?: string): Promise<any> {
+    try {
+      console.log(
+        `[ChatService] Routing message to smart-agent: ${message} (Role: ${userRole})`,
+      );
+
+      // Route all messages to smart-agent (LLM router)
+      const response = await firstValueFrom(
+        this.httpService.post(
+          'http://localhost:8000/smart',
+          {
+            message: message,
+            user_role: userRole,
+            timestamp: new Date().toISOString(),
+          },
+          {
+            timeout: 30000, // 30 seconds timeout
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      );
+
+      console.log(`[ChatService] Smart agent response received`);
+      return response.data;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      console.error('[ChatService] Error calling smart agent:', errorMessage);
+
+      if (error && typeof error === 'object' && 'code' in error) {
+        if (error.code === 'ECONNREFUSED') {
+          throw new HttpException(
+            'Smart agent service is unavailable',
+            HttpStatus.SERVICE_UNAVAILABLE,
+          );
+        }
+
+        if (error.code === 'ECONNABORTED') {
+          throw new HttpException(
+            'Smart agent service timeout',
+            HttpStatus.REQUEST_TIMEOUT,
+          );
+        }
+      }
+
+      throw new HttpException(
+        'Failed to communicate with smart agent',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   async getAgentStatus(): Promise<any> {
     try {
       const response = await firstValueFrom(

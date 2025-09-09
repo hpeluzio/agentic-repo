@@ -43,6 +43,32 @@ interface RagResponse {
   }> | null;
 }
 
+interface SmartResponse {
+  success: boolean;
+  response: string;
+  timestamp: string;
+  agent_used: string;
+  routing_info?: {
+    agent: string;
+    confidence: string;
+    reasoning: string;
+  } | null;
+  sql_info?: {
+    queries_executed: Array<{
+      type: string;
+      description: string;
+      sql_query: string | null;
+    }>;
+    total_execution_time: number;
+    queries_count: number;
+  } | null;
+  sources?: Array<{
+    title: string;
+    category: string;
+    relevance_score: number;
+  }> | null;
+}
+
 @Controller('chat')
 export class ChatController {
   constructor(
@@ -138,6 +164,62 @@ export class ChatController {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       console.error('[NestJS] RAG Error:', errorMessage);
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        'Internal server error',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post('smart')
+  async chatSmart(
+    @Body() body: { message: string; user_role: string },
+    @Headers('authorization') auth: string,
+  ): Promise<SmartResponse> {
+    try {
+      // 1. Validate authentication
+      if (!auth || !auth.startsWith('Bearer ')) {
+        throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+      }
+
+      // 2. Validate message
+      if (!body.message || body.message.trim().length === 0) {
+        throw new HttpException('Message is required', HttpStatus.BAD_REQUEST);
+      }
+
+      // 3. User role validation is now handled by LLM in the Python agent
+      // No need for rigid role checking here - let the intelligent LLM decide
+
+      // 4. Log the request
+      console.log(
+        `[NestJS] Smart query from ${body.user_role}: ${body.message}`,
+      );
+
+      // 5. Call the Python Smart Agent service
+      const smartResponse = (await this.chatService.sendToSmartAgent(
+        body.message,
+        body.user_role,
+      )) as SmartResponse;
+
+      // 6. Return response with the same structure as python-agent
+      return {
+        success: smartResponse.success,
+        response: smartResponse.response,
+        timestamp: smartResponse.timestamp,
+        agent_used: smartResponse.agent_used,
+        routing_info: smartResponse.routing_info,
+        sql_info: smartResponse.sql_info,
+        sources: smartResponse.sources,
+      };
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      console.error('[NestJS] Smart Agent Error:', errorMessage);
 
       if (error instanceof HttpException) {
         throw error;

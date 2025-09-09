@@ -16,6 +16,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from pathlib import Path
 from langchain_core.messages import HumanMessage
+from langchain_openai import ChatOpenAI
 from real_rag_service import get_real_rag_service
 
 # Load environment variables from .env file in the current directory
@@ -69,6 +70,56 @@ def extract_sql_info_from_messages(messages):
     
     return sql_info
 
+async def route_query(message: str, user_role: str) -> dict:
+    """Use LLM to decide which agent(s) to use for the query."""
+    
+    llm = ChatOpenAI(
+        model="gpt-3.5-turbo",
+        temperature=0.1,
+        api_key=os.getenv("OPENAI_API_KEY")
+    )
+    
+    router_prompt = f"""
+You are a smart router that decides which AI agent to use for user queries.
+
+User Role: {user_role}
+Query: "{message}"
+
+Available Agents:
+1. DATABASE: For queries about data, metrics, analytics, customers, products, orders, sales, revenue, statistics, counts, etc.
+2. RAG: For queries about company policies, procedures, benefits, documents, HR information, company culture, mission, vision, etc.
+3. BOTH: For queries that need both data and document information.
+
+Examples:
+- "How many products do we have?" → DATABASE
+- "What is our vacation policy?" → RAG
+- "How many employees do we have and what is our mission?" → BOTH
+- "What are our top customers?" → DATABASE
+- "How do I submit an expense report?" → RAG
+- "Show me our revenue and company values" → BOTH
+
+Respond with ONLY one word:
+- DATABASE: Query is about data/analytics/statistics
+- RAG: Query is about documents/policies/procedures
+- BOTH: Query needs both data and documents
+
+Response:"""
+
+    try:
+        response = llm.invoke(router_prompt)
+        decision = response.content.strip().upper()
+        
+        return {
+            "agent": decision.lower(),
+            "confidence": "high",
+            "reasoning": f"LLM determined this is a {decision} query"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in LLM routing: {e}")
+        # Fallback to RAG if LLM fails
+        return {"agent": "rag", "confidence": "low", "reasoning": "Fallback due to error"}
+
 # Pydantic models
 class ChatRequest(BaseModel):
     message: str
@@ -92,6 +143,15 @@ class RagResponse(BaseModel):
     success: bool
     response: str
     timestamp: str
+    sources: Optional[List[Dict[str, Any]]] = None
+
+class SmartResponse(BaseModel):
+    success: bool
+    response: str
+    timestamp: str
+    agent_used: str
+    routing_info: Optional[Dict[str, Any]] = None
+    sql_info: Optional[Dict[str, Any]] = None
     sources: Optional[List[Dict[str, Any]]] = None
 
 @app.on_event("startup")
@@ -250,6 +310,78 @@ async def get_documents():
             detail=f"Internal server error: {str(e)}"
         )
 
+@app.post("/smart", response_model=SmartResponse)
+async def smart_chat(request: ChatRequest):
+    """
+    Smart agent that automatically routes between Database and RAG agents.
+    """
+    try:
+        if not request.message or request.message.strip() == "":
+            raise HTTPException(
+                status_code=400,
+                detail="Message cannot be empty"
+            )
+
+        logger.info(f"Processing Smart query: {request.message[:100]}...")
+
+        # LLM Router - decide which agent to use
+        routing_decision = await route_query(request.message, request.user_role or "employee")
+        agent_used = routing_decision["agent"]
+        
+        logger.info(f"🧠 LLM Router decision: {agent_used} (confidence: {routing_decision['confidence']})")
+
+        if agent_used == "database":
+            # Route to Database Agent
+            result = await chat(request)
+            return SmartResponse(
+                success=result.success,
+                response=result.response,
+                timestamp=result.timestamp,
+                agent_used="database",
+                routing_info=routing_decision,
+                sql_info=result.sql_info
+            )
+            
+        elif agent_used == "rag":
+            # Route to RAG Agent
+            rag_request = RagRequest(message=request.message)
+            result = await rag_chat(rag_request)
+            return SmartResponse(
+                success=result.success,
+                response=result.response,
+                timestamp=result.timestamp,
+                agent_used="rag",
+                routing_info=routing_decision,
+                sources=result.sources
+            )
+            
+        else:  # both
+            # Combine both responses
+            db_result = await chat(request)
+            rag_request = RagRequest(message=request.message)
+            rag_result = await rag_chat(rag_request)
+            
+            combined_response = f"**Database Information:**\n{db_result.response}\n\n**Document Information:**\n{rag_result.response}"
+            
+            return SmartResponse(
+                success=True,
+                response=combined_response,
+                timestamp=datetime.now().isoformat(),
+                agent_used="both",
+                routing_info=routing_decision,
+                sql_info=db_result.sql_info,
+                sources=rag_result.sources
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error processing Smart query: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
 @app.get("/")
 async def root():
     """Root endpoint with API information."""
@@ -264,6 +396,9 @@ async def root():
             "rag_agent": {
                 "chat": "/rag",
                 "documents": "/rag/documents"
+            },
+            "smart_agent": {
+                "chat": "/smart"
             },
             "docs": "/docs"
         }

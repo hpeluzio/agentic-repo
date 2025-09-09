@@ -6,7 +6,7 @@ interface Message {
   content: string;
   role: 'user' | 'assistant';
   timestamp: Date;
-  agent: 'database' | 'rag';
+  agent: 'database' | 'rag' | 'smart';
   sources?: Array<{
     title: string;
     category: string;
@@ -21,10 +21,16 @@ interface Message {
     total_execution_time: number;
     queries_count: number;
   };
+  agent_used?: string;
+  routing_info?: {
+    agent: string;
+    confidence: string;
+    reasoning: string;
+  };
 }
 
 function App() {
-  const [activeAgent, setActiveAgent] = useState<'database' | 'rag'>(
+  const [activeAgent, setActiveAgent] = useState<'database' | 'rag' | 'smart'>(
     'database',
   );
   const [userRole, setUserRole] = useState<'employee' | 'manager' | 'admin'>(
@@ -66,9 +72,13 @@ function App() {
 
     try {
       const endpoint =
-        activeAgent === 'database' ? '/chat/database' : '/chat/rag';
-      const body =
         activeAgent === 'database'
+          ? '/chat/database'
+          : activeAgent === 'rag'
+          ? '/chat/rag'
+          : '/chat/smart';
+      const body =
+        activeAgent === 'database' || activeAgent === 'smart'
           ? { message: inputMessage, user_role: userRole }
           : { message: inputMessage };
 
@@ -128,6 +138,8 @@ function App() {
         agent: activeAgent,
         sources: data.sources,
         sql_info: data.sql_info,
+        agent_used: data.agent_used,
+        routing_info: data.routing_info,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -221,11 +233,28 @@ function App() {
                   </div>
                 </div>
               </button>
+
+              <button
+                onClick={() => setActiveAgent('smart')}
+                className={`w-full text-left p-3 rounded-lg transition-colors ${
+                  activeAgent === 'smart'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span>🧠</span>
+                  <div>
+                    <div className="font-medium">Smart Agent</div>
+                    <div className="text-xs text-gray-400">Auto-Route</div>
+                  </div>
+                </div>
+              </button>
             </div>
           </div>
 
-          {/* Role Selection (Database Agent only) */}
-          {activeAgent === 'database' && (
+          {/* Role Selection (Database and Smart Agents) */}
+          {(activeAgent === 'database' || activeAgent === 'smart') && (
             <div>
               <h3 className="text-sm font-medium text-gray-400 mb-2">
                 User Role
@@ -244,13 +273,19 @@ function App() {
                 }`}
               >
                 <option value="employee">👤 Employee (Limited)</option>
-                <option value="manager">👔 Manager (Full Access)</option>
+                <option value="manager">👔 Manager (Moderate)</option>
                 <option value="admin">👑 Admin (Full Access)</option>
               </select>
               {userRole === 'employee' && (
                 <div className="mt-2 p-2 bg-red-900/30 border border-red-500/50 rounded text-xs text-red-300">
                   ⚠️ Employee role has limited database access. Switch to
-                  Manager or Admin for full access.
+                  Manager for moderate access or Admin for full access.
+                </div>
+              )}
+              {userRole === 'manager' && (
+                <div className="mt-2 p-2 bg-yellow-900/30 border border-yellow-500/50 rounded text-xs text-yellow-300">
+                  ⚠️ Manager role has moderate access. Some sensitive data may
+                  be restricted. Switch to Admin for full access.
                 </div>
               )}
             </div>
@@ -281,7 +316,9 @@ function App() {
             </div>
             <div>
               <div className="text-sm font-medium">User</div>
-              <div className="text-xs text-gray-400">Free Plan</div>
+              <div className="text-xs text-gray-400">
+                {userRole.charAt(0).toUpperCase() + userRole.slice(1)} Role
+              </div>
             </div>
           </div>
         </div>
@@ -305,12 +342,16 @@ function App() {
                 <h2 className="header-title">
                   {activeAgent === 'database'
                     ? '🗄️ Database Agent'
-                    : '📚 RAG Agent'}
+                    : activeAgent === 'rag'
+                    ? '📚 RAG Agent'
+                    : '🧠 Smart Agent'}
                 </h2>
                 <p className="header-subtitle">
                   {activeAgent === 'database'
                     ? 'Ask questions about your database and get SQL insights'
-                    : 'Search through company documents and policies'}
+                    : activeAgent === 'rag'
+                    ? 'Search through company documents and policies'
+                    : 'Intelligent agent that automatically routes your queries'}
                 </p>
               </div>
             </div>
@@ -327,34 +368,48 @@ function App() {
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
                 <div className="text-6xl mb-4">
-                  {activeAgent === 'database' ? '🗄️' : '📚'}
+                  {activeAgent === 'database'
+                    ? '🗄️'
+                    : activeAgent === 'rag'
+                    ? '📚'
+                    : '🧠'}
                 </div>
                 <h3 className="text-xl font-semibold mb-2">
-                  {activeAgent === 'database' ? 'Database Agent' : 'RAG Agent'}
+                  {activeAgent === 'database'
+                    ? 'Database Agent'
+                    : activeAgent === 'rag'
+                    ? 'RAG Agent'
+                    : 'Smart Agent'}
                 </h3>
                 <p className="text-gray-400 mb-4">
                   {activeAgent === 'database'
                     ? 'Ask me anything about your database. I can help with SQL queries, data analysis, and insights.'
-                    : 'Ask me anything about company documents, policies, and procedures.'}
+                    : activeAgent === 'rag'
+                    ? 'Ask me anything about company documents, policies, and procedures.'
+                    : "Ask me anything! I'll automatically choose the best agent (Database or RAG) to answer your question."}
                 </p>
                 <div className="text-sm text-gray-500">
-                  {activeAgent === 'database' && userRole === 'employee' && (
-                    <div className="mb-4 p-3 bg-red-900/20 border border-red-500/50 rounded-lg">
-                      <p className="text-red-300 font-medium mb-1">
-                        ⚠️ Limited Access - Employee Role
-                      </p>
-                      <p className="text-red-200 text-xs">
-                        You can only ask general questions. For detailed
-                        database analysis, switch to Manager or Admin role in
-                        the sidebar.
-                      </p>
-                    </div>
-                  )}
-                  {activeAgent === 'database' && userRole !== 'employee' && (
+                  {(activeAgent === 'database' || activeAgent === 'smart') &&
+                    userRole === 'employee' && (
+                      <div className="mb-4 p-3 bg-red-900/20 border border-red-500/50 rounded-lg">
+                        <p className="text-red-300 font-medium mb-1">
+                          ⚠️ Limited Access - Employee Role
+                        </p>
+                        <p className="text-red-200 text-xs">
+                          You can only ask general questions. For detailed
+                          database analysis, switch to Manager or Admin role in
+                          the sidebar.
+                        </p>
+                      </div>
+                    )}
+                  {activeAgent === 'database' && userRole === 'admin' && (
                     <p className="mb-2 text-green-300">
-                      ✅ Full Access -{' '}
-                      {userRole.charAt(0).toUpperCase() + userRole.slice(1)}{' '}
-                      Role
+                      ✅ Full Access - Admin Role
+                    </p>
+                  )}
+                  {activeAgent === 'database' && userRole === 'manager' && (
+                    <p className="mb-2 text-yellow-300">
+                      ⚠️ Moderate Access - Manager Role
                     </p>
                   )}
                   <p>Type your question below to get started.</p>
@@ -378,9 +433,11 @@ function App() {
                 >
                   <div className="whitespace-pre-wrap">{message.content}</div>
 
-                  {/* SQL Info for Database Agent */}
+                  {/* SQL Info for Database Agent and Smart Agent (when using database) */}
                   {message.role === 'assistant' &&
-                    message.agent === 'database' &&
+                    (message.agent === 'database' ||
+                      (message.agent === 'smart' &&
+                        message.agent_used === 'database')) &&
                     message.sql_info && (
                       <div className="mt-3 p-3 bg-gray-800 rounded border-l-4 border-blue-500">
                         <div className="text-sm font-medium text-blue-400 mb-2">
@@ -398,9 +455,11 @@ function App() {
                       </div>
                     )}
 
-                  {/* Sources for RAG Agent */}
+                  {/* Sources for RAG Agent and Smart Agent (when using RAG) */}
                   {message.role === 'assistant' &&
-                    message.agent === 'rag' &&
+                    (message.agent === 'rag' ||
+                      (message.agent === 'smart' &&
+                        message.agent_used === 'rag')) &&
                     message.sources && (
                       <div className="mt-3 p-3 bg-gray-800 rounded border-l-4 border-green-500">
                         <div className="text-sm font-medium text-green-400 mb-2">
@@ -413,6 +472,31 @@ function App() {
                               {source.relevance_score}
                             </div>
                           ))}
+                        </div>
+                      </div>
+                    )}
+
+                  {/* Routing Info for Smart Agent */}
+                  {message.role === 'assistant' &&
+                    message.agent === 'smart' &&
+                    message.routing_info && (
+                      <div className="mt-3 p-3 bg-gray-800 rounded border-l-4 border-purple-500">
+                        <div className="text-sm font-medium text-purple-400 mb-2">
+                          🧠 Smart Routing
+                        </div>
+                        <div className="text-xs text-gray-300 space-y-1">
+                          <div>
+                            <span className="font-medium">Agent Used:</span>{' '}
+                            {message.agent_used}
+                          </div>
+                          <div>
+                            <span className="font-medium">Confidence:</span>{' '}
+                            {message.routing_info.confidence}
+                          </div>
+                          <div>
+                            <span className="font-medium">Reasoning:</span>{' '}
+                            {message.routing_info.reasoning}
+                          </div>
                         </div>
                       </div>
                     )}

@@ -1,6 +1,6 @@
 # 🤖 AI Agents
 
-A powerful AI-powered system with dual agents: **Database Agent** for SQL analysis and **RAG Agent** for document search. Built with NestJS, React, and FastAPI. Features sophisticated role-based permissions and natural language querying.
+A powerful AI-powered system with **three intelligent agents**: **Database Agent** for SQL analysis, **RAG Agent** for document search, and **Smart Agent** for automatic query routing. Built with NestJS, React, and FastAPI. Features sophisticated role-based permissions, LLM-based routing, and natural language querying.
 
 ## 🏗️ Architecture
 
@@ -24,7 +24,7 @@ ai-agents/
 - **Real-time Queries**: Direct database interaction via LangGraph
 - **SQL Information**: Detailed query execution information
 - **Multi-step Reasoning**: Complex queries broken down into logical steps
-- **Role-based Access**: Admin and Manager roles with different permission levels
+- **LLM-based Permissions**: Intelligent permission checking using GPT models
 
 ### 📚 RAG Agent
 
@@ -34,12 +34,24 @@ ai-agents/
 - **Source Attribution**: Shows which documents were used for answers
 - **Public Access**: All employees can access company documents
 - **Real-time Search**: Instant answers from document knowledge base
+- **Vector Embeddings**: Advanced semantic search using OpenAI embeddings
+- **ChromaDB Integration**: Persistent vector storage for document retrieval
+
+### 🧠 Smart Agent
+
+- **Intelligent Routing**: Automatically determines which agent(s) to use
+- **LLM-based Decision Making**: Uses GPT to analyze query intent and context
+- **Combined Responses**: Can use both Database and RAG agents for comprehensive answers
+- **Transparent Routing**: Shows which agent was used and why
+- **Confidence Scoring**: Displays routing confidence and reasoning
+- **Seamless UX**: Users don't need to choose between agents
 
 ### 🔐 Role-Based Permissions
 
-- **Employee**: Access to RAG Agent (company documents)
-- **Manager**: Access to RAG Agent + basic database metrics
+- **Employee**: Limited database access, full RAG access
+- **Manager**: Moderate database access, full RAG access
 - **Admin**: Full access to both Database and RAG Agents
+- **LLM Permission Checking**: Intelligent permission validation using AI reasoning
 
 ## 🚀 Quick Start
 
@@ -105,7 +117,7 @@ pnpm run dev
 
 5. **Access the application:**
 
-- Frontend: http://localhost:5173 (Dual Agent Interface)
+- Frontend: http://localhost:5173 (Three Agent Interface)
 - Backend API: http://localhost:3000
 - AI Agents: http://localhost:8000
 
@@ -237,6 +249,47 @@ Response:
 GET /rag/documents
 ```
 
+### 🧠 Smart Agent
+
+#### Chat with Smart Agent (Auto-Routing)
+
+```bash
+POST /chat/smart
+Authorization: Bearer test-token
+{
+  "message": "How many products do we have and what is our company mission?",
+  "user_role": "admin"
+}
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "response": "**Database Information:**\nWe currently have 1,940 products...\n\n**Document Information:**\nOur company mission is to empower businesses...",
+  "timestamp": "2025-09-09T16:33:47.617849",
+  "agent_used": "both",
+  "routing_info": {
+    "agent": "both",
+    "confidence": "high",
+    "reasoning": "LLM determined this is a BOTH query"
+  },
+  "sql_info": {
+    "queries_executed": [],
+    "total_execution_time": 0,
+    "queries_count": 0
+  },
+  "sources": [
+    {
+      "title": "Mission, Vision & Values",
+      "category": "general",
+      "relevance_score": 1.0
+    }
+  ]
+}
+```
+
 ### System Health Check
 
 ```bash
@@ -306,6 +359,28 @@ curl -X POST http://localhost:3000/chat/rag \
 curl -X GET http://localhost:3000/rag/documents
 ```
 
+### Test Smart Agent
+
+```bash
+# Test automatic routing (database query)
+curl -X POST http://localhost:3000/chat/smart \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer test-token" \
+  -d '{"message": "How many products do we have?", "user_role": "admin"}'
+
+# Test automatic routing (document query)
+curl -X POST http://localhost:3000/chat/smart \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer test-token" \
+  -d '{"message": "What is our vacation policy?", "user_role": "employee"}'
+
+# Test combined routing (both agents)
+curl -X POST http://localhost:3000/chat/smart \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer test-token" \
+  -d '{"message": "How many employees do we have and what is our mission?", "user_role": "manager"}'
+```
+
 ### Test AI Agents Directly
 
 ```bash
@@ -318,6 +393,11 @@ curl -X POST http://localhost:8000/chat \
 curl -X POST http://localhost:8000/rag \
   -H "Content-Type: application/json" \
   -d '{"message": "vacation policy"}'
+
+# Test smart agent directly
+curl -X POST http://localhost:8000/smart \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What are our top product categories?", "user_role": "manager"}'
 ```
 
 ## 💡 Example Queries
@@ -340,13 +420,24 @@ curl -X POST http://localhost:8000/rag \
 - "How do I submit an expense report?"
 - "What is the remote work policy?"
 
+### Smart Agent Examples
+
+- "How many products do we have?" (Routes to Database Agent)
+- "What is our vacation policy?" (Routes to RAG Agent)
+- "How many employees do we have and what is our mission?" (Uses Both Agents)
+- "What are our top customers and company values?" (Uses Both Agents)
+- "Show me our revenue and benefits package" (Uses Both Agents)
+- "What is our remote work policy?" (Routes to RAG Agent)
+
 ## 🏗️ Tech Stack
 
 - **Backend**: NestJS, TypeScript
 - **Frontend**: React, Vite, Tailwind CSS
 - **AI Agents**: FastAPI, LangGraph, Python
 - **Database**: SQLite (with mock e-commerce data)
-- **AI Models**: OpenAI GPT models
+- **AI Models**: OpenAI GPT models, OpenAI Embeddings
+- **Vector Store**: ChromaDB for document embeddings
+- **RAG Framework**: LangChain for retrieval-augmented generation
 - **Package Manager**: pnpm
 - **Containerization**: Docker Compose
 
@@ -370,7 +461,9 @@ This project is licensed under the MIT License.
 
 ## 🔮 Future Enhancements
 
-- [ ] Advanced RAG with vector embeddings
+- [x] Advanced RAG with vector embeddings
+- [x] Smart Agent with LLM-based routing
+- [x] LLM-based permission checking
 - [ ] Conversation history
 - [ ] Advanced SQL query visualization
 - [ ] Export functionality
@@ -385,17 +478,19 @@ This project is licensed under the MIT License.
 
 ## 🎯 Why This System?
 
-- **Dual Agent Architecture**: Database analysis + Document search
-- **Role-based Security**: Different access levels for different users
+- **Triple Agent Architecture**: Database analysis + Document search + Smart routing
+- **Intelligent Routing**: LLM automatically chooses the best agent(s) for each query
+- **Role-based Security**: Different access levels with LLM-based permission checking
 - **Natural Language Interface**: Ask questions in plain English
 - **LangGraph Integration**: Multi-step reasoning for complex queries
 - **Real-time Analytics**: Get instant insights from your data
+- **Advanced RAG**: Vector embeddings and semantic search for document retrieval
 - **Modern Architecture**: Clean separation between frontend, backend, and AI agents
 - **Scalability**: Easy to add new features and data sources
-- **Learning Platform**: Perfect for understanding AI agents and RAG systems
+- **Learning Platform**: Perfect for understanding AI agents, RAG systems, and LLM routing
 - **Open Source**: Full control over your AI system
 - **Production Ready**: Built with enterprise-grade technologies
 
 ---
 
-**Built with ❤️ using NestJS, React, FastAPI, and LangGraph**
+**Built with ❤️ using NestJS, React, FastAPI, LangGraph, and LangChain**
